@@ -1,7 +1,6 @@
 package io.bfil.eventsourcing
 
-import scala.concurrent.ExecutionContext
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -54,7 +53,7 @@ abstract class Aggregate[Event, State <: AggregateState[Event, State]](implicit 
          .recoverWith { case NonFatal(_) => Future.failed(ex) }
 
   protected def unexpectedEventHandler(state: State): State#EventHandler = {
-    case event => throw new Exception(s"Unexpected event $event in state $state")
+    case event => throw new UnexpectedEventException(event, state)
   }
 
   protected implicit class MappableFutureState(future: Future[State]) {

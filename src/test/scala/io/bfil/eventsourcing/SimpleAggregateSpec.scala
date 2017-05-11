@@ -7,54 +7,54 @@ import org.scalatest.concurrent.ScalaFutures
 
 class SimpleAggregateSpec extends WordSpec with Matchers with ScalaFutures {
 
-  val profile = new SimpleProfileAggregate("1")
-               with InMemoryProfilesJournal
+  val customer = new SimpleCustomerAggregate("1")
+                with InMemoryCustomersJournal
 
   "SimpleAggregate" should {
 
-    "create a profile correctly" in {
-      profile.create("Bruno", 32).futureValue shouldBe Profile("1", "Bruno", 32)
-      profile.recover.futureValue shouldBe Some(Profile("1", "Bruno", 32))
+    "create a customer correctly" in {
+      customer.create("Bruno").futureValue shouldBe Customer("1", "Bruno")
+      customer.recover.futureValue shouldBe Some(Customer("1", "Bruno"))
     }
 
-    "rename a profile correctly" in {
-      profile.rename("Bruno Mars").futureValue shouldBe "Bruno Mars"
-      profile.recover.futureValue shouldBe Some(Profile("1", "Bruno Mars", 32))
+    "rename a customer correctly" in {
+      customer.rename("Bruno Mars").futureValue shouldBe "Bruno Mars"
+      customer.recover.futureValue shouldBe Some(Customer("1", "Bruno Mars"))
     }
 
   }
 
-  sealed trait ProfileEvent
-  case class ProfileCreated(id: String, name: String, age: Int) extends ProfileEvent
-  case class ProfileRenamed(name: String) extends ProfileEvent
+  sealed trait CustomerEvent
+  case class CustomerCreated(id: String, name: String) extends CustomerEvent
+  case class CustomerRenamed(name: String) extends CustomerEvent
 
-  case class Profile(id: String, name: String, age: Int)
+  case class Customer(id: String, name: String)
 
-  trait InMemoryProfilesJournal extends JournalProvider[ProfileEvent] {
-    val journal: Journal[ProfileEvent] = new InMemoryJournal[ProfileEvent]
+  trait InMemoryCustomersJournal extends JournalProvider[CustomerEvent] {
+    val journal: Journal[CustomerEvent] = new InMemoryJournal[CustomerEvent]
   }
 
-  class SimpleProfileAggregate(id: String) extends SimpleAggregate[ProfileEvent, Option[Profile]] {
-    self: JournalProvider[ProfileEvent] =>
+  class SimpleCustomerAggregate(id: String) extends SimpleAggregate[CustomerEvent, Option[Customer]] {
+    self: JournalProvider[CustomerEvent] =>
 
-    val aggregateId = s"profile-$id"
+    val aggregateId = s"customer-$id"
     val initialState = None
 
-    def onEvent(state: Option[Profile], event: ProfileEvent): Option[Profile] = event match {
-      case ProfileCreated(id, name, age) => Some(Profile(id, name, age))
-      case ProfileRenamed(name)          => state.map(_.copy(name = name))
+    def onEvent(state: Option[Customer], event: CustomerEvent): Option[Customer] = event match {
+      case CustomerCreated(id, name) => Some(Customer(id, name))
+      case CustomerRenamed(name)     => state.map(_.copy(name = name))
     }
 
-    def create(name: String, age: Int): Future[Profile] =
+    def create(name: String): Future[Customer] =
       for {
         state <- recover
-        newState <- persist(state, ProfileCreated(id, name, age))
+        newState <- persist(state, CustomerCreated(id, name))
       } yield newState.get
 
     def rename(name: String): Future[String] =
       for {
         state <- recover
-        newState <- persist(state, ProfileRenamed(name))
+        newState <- persist(state, CustomerRenamed(name))
       } yield newState.get.name
   }
 }
