@@ -1,13 +1,9 @@
 package io.bfil.eventsourcing
 
-import java.util.concurrent.Executors
-
 import scala.concurrent.{ExecutionContext, Future}
 
-abstract class SimpleAggregate[Event, State] {
+abstract class SimpleAggregate[Event, State](implicit executionContext: ExecutionContext) {
   self: JournalProvider[Event] =>
-
-  implicit val executionContext = ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor())
 
   val aggregateId: String
   protected val initialState: State

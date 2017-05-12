@@ -1,15 +1,11 @@
 package io.bfil.eventsourcing
 
-import java.util.concurrent.Executors
-
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 import org.scalatest.{Matchers, WordSpec}
 import org.scalatest.concurrent.ScalaFutures
 
-class AggregateSpec extends WordSpec with Matchers with ScalaFutures {
-
-  implicit val executionContext = ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor())
+class AggregateSpec extends WordSpec with Matchers with ScalaFutures with SingleThreadedExecutionContext {
 
   val customer = new CustomerAggregate("1")
                 with InMemoryCustomersJournal
