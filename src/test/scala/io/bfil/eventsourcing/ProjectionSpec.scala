@@ -30,7 +30,7 @@ class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Event
 
   trait FakeCustomerEventStream extends EventStreamProvider[CustomerEvent] {
     val eventStream: EventStream[CustomerEvent] = new EventStream[CustomerEvent] {
-      def subscribe(f: CustomerEvent => Future[Unit]): Unit = 
+      def subscribe(f: CustomerEvent => Future[Unit], offset: Long = 0): Unit = 
         1 to 10 map { id =>
           f(CustomerCreated(s"customer-${id}", "Bruno"))
         }
