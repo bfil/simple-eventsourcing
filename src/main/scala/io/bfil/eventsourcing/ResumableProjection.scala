@@ -1,6 +1,7 @@
 package io.bfil.eventsourcing
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.control.NonFatal
 
 abstract class ResumableProjection[Event](implicit executionContext: ExecutionContext) {
   self: EventStreamProvider[Event] with OffsetStoreProvider =>
@@ -11,9 +12,11 @@ abstract class ResumableProjection[Event](implicit executionContext: ExecutionCo
 
   def getEventOffset(event: Event): Long
 
-  def onOffsetSaveError(event: Event): PartialFunction[Throwable, Future[Unit]]
+  def onOffsetSaveError(event: Event): PartialFunction[Throwable, Future[Unit]] = {
+    case NonFatal(ex) => Future.failed(ex)
+  }
 
-  def run() =
+  def run(): Future[Unit] =
     for {
       lastOffset <- offsetStore.load(projectionId)
     } yield eventStream.subscribe(
@@ -29,5 +32,4 @@ abstract class ResumableProjection[Event](implicit executionContext: ExecutionCo
       },
       lastOffset
     )
-
 }
