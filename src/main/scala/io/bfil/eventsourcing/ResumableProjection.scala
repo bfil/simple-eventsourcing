@@ -8,19 +8,22 @@ abstract class ResumableProjection[Event](implicit executionContext: ExecutionCo
   val projectionId: String
 
   def processEvent(f: Event): Future[Unit]
-  
+
   def getEventOffset(event: Event): Long
+
+  def onOffsetSaveError(event: Event): PartialFunction[Throwable, Future[Unit]]
 
   def run() =
     for {
-      lastOffset <- offsetStore.read(projectionId)
+      lastOffset <- offsetStore.load(projectionId)
     } yield eventStream.subscribe(
       event => {
         val eventOffset = getEventOffset(event)
         if(eventOffset > lastOffset) {
           for {
             _ <- processEvent(event)
-            _ <- offsetStore.write(projectionId, eventOffset)
+            _ <- offsetStore.save(projectionId, eventOffset)
+                            .recoverWith(onOffsetSaveError(event))
           } yield ()
         } else Future.successful(())
       },

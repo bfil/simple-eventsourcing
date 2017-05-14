@@ -1,6 +1,7 @@
 package io.bfil.eventsourcing
 
 import scala.concurrent.Future
+import scala.util.control.NonFatal
 
 import org.scalatest.{Matchers, WordSpec}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
@@ -10,7 +11,7 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
   var customerCount = 0
   val customerCountProjection = new CustomerCountResumableProjection()
                                         with FakeCustomerEventStream
-                                        with InMemoryOffsetStore
+                                        with InMemoryCustomerCountOffsetStore
 
   "ResumableProjection" should {
 
@@ -19,7 +20,7 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
       eventually {
         customerCount shouldBe 10
       }
-      customerCountProjection.offsetStore.read("customer-count").futureValue shouldBe 10
+      customerCountProjection.offsetStore.load("customer-count").futureValue shouldBe 10
     }
 
   }
@@ -39,11 +40,11 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
     }
   }
 
-  trait InMemoryOffsetStore extends OffsetStoreProvider {
+  trait InMemoryCustomerCountOffsetStore extends OffsetStoreProvider {
     val offsetStore = new OffsetStore {
       var offset: Long = 0
-      def read(offsetId: String): Future[Long] = Future.successful(offset)
-      def write(offsetId: String, value: Long): Future[Unit] = Future.successful(offset = value)
+      def load(offsetId: String): Future[Long] = Future.successful(offset)
+      def save(offsetId: String, value: Long): Future[Unit] = Future.successful(offset = value)
     }
   }
 
@@ -58,5 +59,9 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
     }
 
     def getEventOffset(event: CustomerEvent): Long = event.offset
+
+    def onOffsetSaveError(event: CustomerEvent) = {
+      case NonFatal(ex) => Future.failed(ex)
+    }
   }
 }
