@@ -1,7 +1,5 @@
 package io.bfil.eventsourcing
 
-import java.util.concurrent.LinkedBlockingQueue
-
 import scala.concurrent.Future
 
 import org.scalatest.{Matchers, WordSpec}
@@ -16,12 +14,11 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
   "ResumableProjection" should {
 
     "generate a customer count and store the last offset in the offset store" in {
-      val queue = new LinkedBlockingQueue[CustomerEvent]()
-      val eventStream = new BlockingQueueEventStream(queue)
+      val eventStream = new BlockingQueueEventStream[CustomerEvent]()
       val customerCountProjection = new CustomerCountResumableProjection(eventStream, offsetStore)
       customerCountProjection.run()
       1 to 10 map { id =>
-        queue.put(CustomerCreated(s"customer-$id", "Bruno", id))
+        eventStream.publish(CustomerCreated(s"customer-$id", "Bruno", id))
       }
       eventually {
         customerCount shouldBe 10
@@ -30,12 +27,11 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
     }
 
     "resume from the last saved offset and ignore older events" in {
-      val queue = new LinkedBlockingQueue[CustomerEvent]()
-      val eventStream = new BlockingQueueEventStream(queue)
+      val eventStream = new BlockingQueueEventStream[CustomerEvent]()
       val customerCountProjection = new CustomerCountResumableProjection(eventStream, offsetStore)
       customerCountProjection.run()
       6 to 20 map { id =>
-        queue.put(CustomerCreated(s"customer-$id", "Bruno", id))
+        eventStream.publish(CustomerCreated(s"customer-$id", "Bruno", id))
       }
       eventually {
         customerCount shouldBe 20

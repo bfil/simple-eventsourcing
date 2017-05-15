@@ -1,7 +1,5 @@
 package io.bfil.eventsourcing
 
-import java.util.concurrent.LinkedBlockingQueue
-
 import scala.concurrent.Future
 
 import org.scalatest.{Matchers, WordSpec}
@@ -9,8 +7,7 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Eventually with SingleThreadedExecutionContext {
 
-  val queue = new LinkedBlockingQueue[CustomerEvent]()
-  val eventStream = new BlockingQueueEventStream(queue)
+  val eventStream = new BlockingQueueEventStream[CustomerEvent]()
 
   val customerCountProjection = new CustomerCountProjection(eventStream)
 
@@ -19,7 +16,7 @@ class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Event
     "generate a customer count" in {
       customerCountProjection.run()
       1 to 10 map { id =>
-        queue.put(CustomerCreated(s"customer-$id", "Bruno"))
+        eventStream.publish(CustomerCreated(s"customer-$id", "Bruno"))
       }
       eventually {
         customerCountProjection.customerCount shouldBe 10
