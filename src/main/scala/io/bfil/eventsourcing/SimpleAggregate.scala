@@ -2,8 +2,7 @@ package io.bfil.eventsourcing
 
 import scala.concurrent.{ExecutionContext, Future}
 
-abstract class SimpleAggregate[Event, State](implicit executionContext: ExecutionContext) {
-  self: JournalProvider[Event] =>
+abstract class SimpleAggregate[Event, State](journal: Journal[Event])(implicit executionContext: ExecutionContext) {
 
   val aggregateId: String
   protected val initialState: State

@@ -9,12 +9,10 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Eventually with SingleThreadedExecutionContext {
 
-  var customerCount = 0
   val queue = new LinkedBlockingQueue[CustomerEvent]()
-  val customerCountProjection = new CustomerCountProjection()
-                               with EventStreamProvider[CustomerEvent] {
-                                 val eventStream = new BlockingQueueEventStream(queue)
-                               }
+  val eventStream = new BlockingQueueEventStream(queue)
+
+  val customerCountProjection = new CustomerCountProjection(eventStream)
 
   "Projection" should {
 
@@ -24,7 +22,7 @@ class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Event
         queue.put(CustomerCreated(s"customer-$id", "Bruno"))
       }
       eventually {
-        customerCount shouldBe 10
+        customerCountProjection.customerCount shouldBe 10
       }
     }
 
@@ -36,8 +34,8 @@ class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Event
 
   case class Customer(id: String, name: String)
 
-  class CustomerCountProjection() extends Projection[CustomerEvent] {
-    self: EventStreamProvider[CustomerEvent] =>
+  class CustomerCountProjection(eventStream: EventStream[CustomerEvent]) extends Projection[CustomerEvent](eventStream) {
+    var customerCount = 0
 
     def processEvent(event: CustomerEvent): Future[Unit] = event match {
       case CustomerCreated(id, name) => Future.successful(customerCount += 1)

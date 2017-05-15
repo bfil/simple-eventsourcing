@@ -7,19 +7,22 @@ import org.scalatest.concurrent.ScalaFutures
 
 class SimpleAggregateSpec extends WordSpec with Matchers with ScalaFutures with SingleThreadedExecutionContext {
 
-  val customer = new SimpleCustomerAggregate("1")
-                with InMemoryCustomersJournal
+  val journal: Journal[CustomerEvent] = new InMemoryJournal[CustomerEvent]
+
+  val customer = new SimpleCustomerAggregate("1", journal)
 
   "SimpleAggregate" should {
 
     "create a customer correctly" in {
       customer.create("Bruno").futureValue shouldBe Customer("1", "Bruno")
       customer.recover.futureValue shouldBe Some(Customer("1", "Bruno"))
+      journal.read("customer-1").futureValue.length shouldBe 1
     }
 
     "rename a customer correctly" in {
       customer.rename("Bruno Mars").futureValue shouldBe "Bruno Mars"
       customer.recover.futureValue shouldBe Some(Customer("1", "Bruno Mars"))
+      journal.read("customer-1").futureValue.length shouldBe 2
     }
 
   }
@@ -30,12 +33,8 @@ class SimpleAggregateSpec extends WordSpec with Matchers with ScalaFutures with 
 
   case class Customer(id: String, name: String)
 
-  trait InMemoryCustomersJournal extends JournalProvider[CustomerEvent] {
-    val journal: Journal[CustomerEvent] = new InMemoryJournal[CustomerEvent]
-  }
-
-  class SimpleCustomerAggregate(id: String) extends SimpleAggregate[CustomerEvent, Option[Customer]] {
-    self: JournalProvider[CustomerEvent] =>
+  class SimpleCustomerAggregate(id: String, journal: Journal[CustomerEvent])
+    extends SimpleAggregate[CustomerEvent, Option[Customer]](journal) {
 
     val aggregateId = s"customer-$id"
     val initialState = None

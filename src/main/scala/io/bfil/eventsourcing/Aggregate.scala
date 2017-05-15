@@ -4,8 +4,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-abstract class Aggregate[Event, State <: AggregateState[Event, State]](implicit executionContext: ExecutionContext) {
-  self: JournalProvider[Event] with CacheProvider[State] =>
+abstract class Aggregate[Event, State <: AggregateState[Event, State]](
+  journal: Journal[Event], cache: Cache[State]
+  )(implicit executionContext: ExecutionContext) {
 
   val aggregateId: String
   protected val initialState: State

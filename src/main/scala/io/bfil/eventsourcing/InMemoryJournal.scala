@@ -4,7 +4,7 @@ import scala.collection.mutable
 import scala.concurrent.Future
 
 class InMemoryJournal[Event] extends Journal[Event] {
-  private var eventsByAggregate: mutable.Map[String, Seq[Event]] = mutable.Map.empty
+  private val eventsByAggregate: mutable.Map[String, Seq[Event]] = mutable.Map.empty
   def read(aggregateId: String): Future[Seq[Event]] = Future.successful {
     eventsByAggregate.get(aggregateId).getOrElse(Seq.empty)
   }

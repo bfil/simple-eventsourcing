@@ -3,8 +3,9 @@ package io.bfil.eventsourcing
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
-abstract class ResumableProjection[Event](implicit executionContext: ExecutionContext) {
-  self: EventStreamProvider[Event] with OffsetStoreProvider =>
+abstract class ResumableProjection[Event](
+  eventStream: EventStream[Event], offsetStore: OffsetStore
+  )(implicit executionContext: ExecutionContext) {
 
   val projectionId: String
 

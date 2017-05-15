@@ -7,9 +7,10 @@ import org.scalatest.concurrent.ScalaFutures
 
 class AggregateSpec extends WordSpec with Matchers with ScalaFutures with SingleThreadedExecutionContext {
 
-  val customer = new CustomerAggregate("1")
-                with InMemoryCustomersJournal
-                with InMemoryCustomersCache
+  val journal: Journal[CustomerEvent] = new InMemoryJournal[CustomerEvent]
+  val cache: Cache[CustomerState] = new InMemoryCache[CustomerState]
+
+  val customer = new CustomerAggregate("1", journal, cache)
 
   "Aggregate" should {
 
@@ -19,6 +20,7 @@ class AggregateSpec extends WordSpec with Matchers with ScalaFutures with Single
       result1.futureValue shouldBe Customer("1", "Bruno")
       result2.failed.futureValue shouldBe an [OptimisticLockException]
       customer.state.futureValue shouldBe Customer("1", "Bruno")
+      journal.read("customer-1").futureValue.length shouldBe 1
     }
 
     "rename a customer correctly and retry on OptimisticLockException" in {
@@ -27,6 +29,7 @@ class AggregateSpec extends WordSpec with Matchers with ScalaFutures with Single
       result1.futureValue shouldBe "Bruno Mars"
       result2.futureValue shouldBe "Bruno"
       customer.state.futureValue shouldBe Customer("1", "Bruno")
+      journal.read("customer-1").futureValue.length shouldBe 3
     }
 
   }
@@ -47,17 +50,8 @@ class AggregateSpec extends WordSpec with Matchers with ScalaFutures with Single
   case class CustomerCreated(id: String, name: String) extends CustomerEvent
   case class CustomerRenamed(name: String) extends CustomerEvent
 
-  trait InMemoryCustomersJournal extends JournalProvider[CustomerEvent] {
-    val journal: Journal[CustomerEvent] = new InMemoryJournal[CustomerEvent]
-  }
-
-  trait InMemoryCustomersCache extends CacheProvider[CustomerState] {
-    val cache: Cache[CustomerState] = new InMemoryCache[CustomerState]
-  }
-
-  class CustomerAggregate(id: String)
-    extends Aggregate[CustomerEvent, CustomerState] {
-    self: JournalProvider[CustomerEvent] with CacheProvider[CustomerState] =>
+  class CustomerAggregate(id: String, journal: Journal[CustomerEvent], cache: Cache[CustomerState])
+    extends Aggregate[CustomerEvent, CustomerState](journal, cache) {
 
     val aggregateId = s"customer-$id"
     val initialState = Empty
