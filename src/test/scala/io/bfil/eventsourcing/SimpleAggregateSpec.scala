@@ -1,5 +1,7 @@
 package io.bfil.eventsourcing
 
+import inmemory._
+
 import scala.concurrent.Future
 
 import org.scalatest.{Matchers, WordSpec}

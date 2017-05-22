@@ -1,9 +1,11 @@
-package io.bfil.eventsourcing
+package io.bfil.eventsourcing.inmemory
 
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
+
+import io.bfil.eventsourcing.{Cache, OptimisticLockException}
 
 class InMemoryCache[State] extends Cache[State] {
   private val cache = new ConcurrentHashMap[String, State]().asScala

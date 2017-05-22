@@ -1,5 +1,7 @@
 package io.bfil.eventsourcing
 
+import inmemory._
+
 import scala.concurrent.Future
 
 import org.scalatest.{Matchers, WordSpec}
@@ -10,40 +12,39 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
   var customerCount = 0
 
   val offsetStore = new InMemoryOffsetStore
+  val eventStream = new InMemoryEventStream[CustomerEvent]()
 
   "ResumableProjection" should {
 
     "generate a customer count and store the last offset in the offset store" in {
-      val eventStream = new BlockingQueueEventStream[CustomerEvent]()
       val customerCountProjection = new CustomerCountResumableProjection(eventStream, offsetStore)
       customerCountProjection.run()
       1 to 10 map { id =>
-        eventStream.publish(CustomerCreated(s"customer-$id", "Bruno", id))
+        eventStream.publish(CustomerCreated(s"customer-$id", "Bruno"))
       }
       eventually {
         customerCount shouldBe 10
+        offsetStore.load("customer-count").futureValue shouldBe 10
       }
-      offsetStore.load("customer-count").futureValue shouldBe 10
     }
 
-    "resume from the last saved offset and ignore older events" in {
-      val eventStream = new BlockingQueueEventStream[CustomerEvent]()
+    "resume from the last saved offset" in {
       val customerCountProjection = new CustomerCountResumableProjection(eventStream, offsetStore)
       customerCountProjection.run()
-      6 to 20 map { id =>
-        eventStream.publish(CustomerCreated(s"customer-$id", "Bruno", id))
+      11 to 20 map { id =>
+        eventStream.publish(CustomerCreated(s"customer-$id", "Bruno"))
       }
       eventually {
         customerCount shouldBe 20
+        offsetStore.load("customer-count").futureValue shouldBe 20
       }
-      offsetStore.load("customer-count").futureValue shouldBe 20
     }
 
   }
 
-  sealed trait CustomerEvent { val offset: Long }
-  case class CustomerCreated(id: String, name: String, val offset: Long) extends CustomerEvent
-  case class CustomerRenamed(name: String, val offset: Long) extends CustomerEvent
+  sealed trait CustomerEvent
+  case class CustomerCreated(id: String, name: String) extends CustomerEvent
+  case class CustomerRenamed(name: String) extends CustomerEvent
 
   case class Customer(id: String, name: String)
 
@@ -52,10 +53,8 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
     val projectionId = "customer-count"
 
     def processEvent(event: CustomerEvent): Future[Unit] = event match {
-      case CustomerCreated(id, name, _) => Future.successful(customerCount += 1)
-      case                            _ => Future.successful(())
+      case CustomerCreated(id, name) => Future.successful(customerCount += 1)
+      case                         _ => Future.successful(())
     }
-
-    def getEventOffset(event: CustomerEvent): Long = event.offset
   }
 }

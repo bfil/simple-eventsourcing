@@ -11,26 +11,21 @@ abstract class ResumableProjection[Event](
 
   def processEvent(f: Event): Future[Unit]
 
-  def getEventOffset(event: Event): Long
+  def run(): Future[Unit] =
+    for {
+      lastOffset <- offsetStore.load(projectionId)
+    } yield eventStream.subscribe({
+      case (event, offset) =>
+        for {
+          _ <- processEvent(event)
+          _ <- offsetStore.save(projectionId, offset)
+                          .recoverWith(onOffsetSaveError(event))
+        } yield ()
+      },
+      lastOffset
+    )
 
   def onOffsetSaveError(event: Event): PartialFunction[Throwable, Future[Unit]] = {
     case NonFatal(ex) => Future.failed(ex)
   }
-
-  def run(): Future[Unit] =
-    for {
-      lastOffset <- offsetStore.load(projectionId)
-    } yield eventStream.subscribe(
-      event => {
-        val eventOffset = getEventOffset(event)
-        if(eventOffset > lastOffset) {
-          for {
-            _ <- processEvent(event)
-            _ <- offsetStore.save(projectionId, eventOffset)
-                            .recoverWith(onOffsetSaveError(event))
-          } yield ()
-        } else Future.successful(())
-      },
-      lastOffset
-    )
 }

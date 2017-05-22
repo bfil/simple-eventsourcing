@@ -1,5 +1,7 @@
 package io.bfil.eventsourcing
 
+import inmemory._
+
 import scala.concurrent.Future
 
 import org.scalatest.{Matchers, WordSpec}
@@ -7,7 +9,7 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Eventually with SingleThreadedExecutionContext {
 
-  val eventStream = new BlockingQueueEventStream[CustomerEvent]()
+  val eventStream = new InMemoryEventStream[CustomerEvent]()
 
   val customerCountProjection = new CustomerCountProjection(eventStream)
 
