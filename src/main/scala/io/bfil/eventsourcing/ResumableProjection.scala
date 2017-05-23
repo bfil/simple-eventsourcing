@@ -4,7 +4,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
 abstract class ResumableProjection[Event](
-  eventStream: EventStream[Event], offsetStore: OffsetStore
+  eventStream: EventStream[EventEnvelope[Event]], offsetStore: OffsetStore
   )(implicit executionContext: ExecutionContext) {
 
   val projectionId: String
@@ -14,18 +14,17 @@ abstract class ResumableProjection[Event](
   def run(): Future[Unit] =
     for {
       lastOffset <- offsetStore.load(projectionId)
-    } yield eventStream.subscribe({
-      case (event, offset) =>
-        for {
-          _ <- processEvent(event)
-          _ <- offsetStore.save(projectionId, offset)
-                          .recoverWith(onOffsetSaveError(event))
-        } yield ()
-      },
+    } yield eventStream.subscribe(envelope =>
+      for {
+        _ <- processEvent(envelope.event)
+        _ <- offsetStore.save(projectionId, envelope.offset)
+                        .recoverWith(onOffsetSaveError(envelope.event))
+      } yield (),
       lastOffset
     )
 
   def onOffsetSaveError(event: Event): PartialFunction[Throwable, Future[Unit]] = {
     case NonFatal(ex) => Future.failed(ex)
   }
+
 }

@@ -12,7 +12,7 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
   var customerCount = 0
 
   val offsetStore = new InMemoryOffsetStore
-  val eventStream = new InMemoryEventStream[CustomerEvent]()
+  val eventStream = new InMemoryEventStream[EventEnvelope[CustomerEvent]]()
 
   "ResumableProjection" should {
 
@@ -20,7 +20,7 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
       val customerCountProjection = new CustomerCountResumableProjection(eventStream, offsetStore)
       customerCountProjection.run()
       1 to 10 map { id =>
-        eventStream.publish(CustomerCreated(s"customer-$id", "Bruno"))
+        eventStream.publish(EventEnvelope(CustomerCreated(s"customer-$id", "Bruno"), id))
       }
       eventually {
         customerCount shouldBe 10
@@ -32,7 +32,7 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
       val customerCountProjection = new CustomerCountResumableProjection(eventStream, offsetStore)
       customerCountProjection.run()
       11 to 20 map { id =>
-        eventStream.publish(CustomerCreated(s"customer-$id", "Bruno"))
+        eventStream.publish(EventEnvelope(CustomerCreated(s"customer-$id", "Bruno"), id))
       }
       eventually {
         customerCount shouldBe 20
@@ -48,7 +48,7 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
 
   case class Customer(id: String, name: String)
 
-  class CustomerCountResumableProjection(eventStream: EventStream[CustomerEvent], offsetStore: OffsetStore)
+  class CustomerCountResumableProjection(eventStream: EventStream[EventEnvelope[CustomerEvent]], offsetStore: OffsetStore)
     extends ResumableProjection[CustomerEvent](eventStream, offsetStore) {
     val projectionId = "customer-count"
 

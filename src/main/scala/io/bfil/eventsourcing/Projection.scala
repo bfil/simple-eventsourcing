@@ -6,8 +6,6 @@ abstract class Projection[Event](eventStream: EventStream[Event])(implicit execu
 
   def processEvent(f: Event): Future[Unit]
 
-  def run() = eventStream.subscribe {
-    case (event, offset) => processEvent(event)
-  }
+  def run() = eventStream subscribe processEvent
 
 }
