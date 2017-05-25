@@ -34,17 +34,21 @@ class MongoJournalEventStream[Event](
                                     .flatMap { docs =>
                                       traverseSequentially(docs) { doc =>
                                         val eventEnvelope = documentToEventEnvelope(doc)
-                                        f(eventEnvelope) map { _ =>
-                                          streamOffset.set(eventEnvelope.offset)
-                                        }
+                                        if(streamOffset.get == eventEnvelope.offset - 1) {
+                                          f(eventEnvelope) map { _ =>
+                                            streamOffset.set(eventEnvelope.offset)
+                                          }
+                                        } else Future.failed(
+                                          new Exception(s"Unexpected offset: ${eventEnvelope.offset}")
+                                        )
                                       }
                                     }
         try {
-          Await.result(batchResult, 1 second)
+          Await.result(batchResult, 5 seconds)
         } catch {
-          case NonFatal(ex) => // Just retry
+          case NonFatal(ex) => ex.printStackTrace
         }
-        Thread.sleep(1000)
+        Thread.sleep(500)
       }
     }).start()
   }

@@ -26,16 +26,15 @@ object Main extends App {
   val journal = new MongoJournal[CustomerEvent](journalCollection, offset)
   val cache = new InMemoryCache[CustomerState]
 
-  val customer = new CustomerAggregate("1", journal, cache)
-
-  (for {
-    cust <- customer.create("Bruno", 32)
-    name <- customer.rename("Bruno Mars")
-  } yield ()) onComplete println
-
-  Thread.sleep(1000)
-
-  customer.state onComplete println
+  1 to 100 foreach { id =>
+    val customer = new CustomerAggregate(id, journal, cache)
+    (for {
+      cust <- customer.create("Bruno", 32)
+      name <- customer.rename("Bruno Mars")
+      name <- customer.rename("Bruno")
+    } yield ()).failed foreach println
+    customer.state
+  }
 
   val offsetStore = new MongoOffsetStore(offsetsCollection)
   val journalEventStream = new MongoJournalEventStream[CustomerEvent](journalCollection)
@@ -43,7 +42,11 @@ object Main extends App {
 
   customersProjection.run()
 
-  Thread.sleep(3000)
+  import scala.concurrent.Await
+  import scala.concurrent.duration._
+  while (Await.result(offsetStore.load("customers-projection"), 3 second) != 300) {
+    Thread.sleep(100)
+  }
 }
 
 sealed trait CustomerState extends AggregateState[CustomerEvent, CustomerState]
@@ -52,15 +55,15 @@ case object Empty extends CustomerState {
     case CustomerCreated(id, name, age) => Customer(id, name, age)
   }
 }
-case class Customer(id: String, name: String, age: Int) extends CustomerState {
+case class Customer(id: Int, name: String, age: Int) extends CustomerState {
   val eventHandler = EventHandler {
     case CustomerRenamed(id, name) => copy(name = name)
   }
 }
 
 sealed trait CustomerEvent
-case class CustomerCreated(id: String, name: String, age: Int) extends CustomerEvent
-case class CustomerRenamed(id: String, name: String) extends CustomerEvent
+case class CustomerCreated(id: Int, name: String, age: Int) extends CustomerEvent
+case class CustomerRenamed(id: Int, name: String) extends CustomerEvent
 
 class CustomerEventSerializer extends MongoJournalEventSerializer[CustomerEvent] {
   def serialize(event: CustomerEvent): (String, String) = event match {
@@ -73,7 +76,7 @@ class CustomerEventSerializer extends MongoJournalEventSerializer[CustomerEvent]
   }
 }
 
-class CustomerAggregate(id: String, journal: Journal[CustomerEvent], cache: Cache[CustomerState])
+class CustomerAggregate(id: Int, journal: Journal[CustomerEvent], cache: Cache[CustomerState])
   extends Aggregate[CustomerEvent, CustomerState](journal, cache) {
 
   val aggregateId = s"customer-$id"
