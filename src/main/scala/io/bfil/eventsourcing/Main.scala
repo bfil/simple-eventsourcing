@@ -37,7 +37,7 @@ object Main extends App {
   }
 
   val offsetStore = new MongoOffsetStore(offsetsCollection)
-  val journalEventStream = new MongoJournalEventStream[CustomerEvent](journalCollection)
+  val journalEventStream = new MongoPollingEventStream[CustomerEvent](journalCollection)
   val customersProjection = new CustomersProjection(customersCollection, journalEventStream, offsetStore)
 
   customersProjection.run()
