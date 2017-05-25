@@ -21,7 +21,7 @@ abstract class Aggregate[Event, State <: AggregateState[Event, State]](
       case ex: OptimisticLockException if n > 0 => retry(n - 1)(f)
     }
 
-  protected def recover(): Future[State] =
+  protected def recover(): Future[State] = retry(1) {
     for {
       cachedState <- cache.get(aggregateId)
       state <- cachedState match {
@@ -34,6 +34,7 @@ abstract class Aggregate[Event, State <: AggregateState[Event, State]](
           } yield journalState
       }
     } yield state
+  }
 
   protected def persist(currentState: State, events: Event*): Future[State] = {
     val newState = computeState(currentState, events)

@@ -18,7 +18,7 @@ class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Event
     "generate a customer count" in {
       customerCountProjection.run()
       1 to 10 map { id =>
-        eventStream.publish(CustomerCreated(s"customer-$id", "Bruno"))
+        eventStream.publish(CustomerCreated(id.toString, "Bruno"))
       }
       eventually {
         customerCountProjection.customerCount shouldBe 10
