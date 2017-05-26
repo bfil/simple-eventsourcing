@@ -4,6 +4,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.DurationInt
 
 import io.bfil.eventsourcing.{EventEnvelope, PollingEventStream}
 import io.bfil.eventsourcing.serialization.EventSerializer
@@ -16,7 +17,7 @@ class MongoPollingEventStream[Event](
   )(implicit
     executionContext: ExecutionContext,
     serializer: EventSerializer[Event]
-  ) extends PollingEventStream[Event] {
+  ) extends PollingEventStream[Event](500 millis) {
 
   def poll(offset: Long): Future[Seq[EventEnvelope[Event]]] =
     collection.find(Filters.gt("offset", offset))
