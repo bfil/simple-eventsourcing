@@ -22,8 +22,7 @@ object Main extends App {
 
   implicit val customerEventSerializer = new CustomerEventSerializer
 
-  val offset = new MongoJournalOffset(journalCollection)
-  val journal = new MongoJournal[CustomerEvent](journalCollection, offset)
+  val journal = new MongoJournal[CustomerEvent](journalCollection)
   val cache = new InMemoryCache[CustomerState]
 
   1 to 100 foreach { id =>
@@ -40,6 +39,7 @@ object Main extends App {
   val journalEventStream = new MongoPollingEventStream[CustomerEvent](journalCollection)
   val customersProjection = new CustomersProjection(customersCollection, journalEventStream, offsetStore)
 
+  val start = System.currentTimeMillis
   customersProjection.run()
 
   import scala.concurrent.Await
@@ -47,6 +47,8 @@ object Main extends App {
   while (Await.result(offsetStore.load("customers-projection"), 3 second) != 300) {
     Thread.sleep(100)
   }
+
+  println(s"Projection run in ${System.currentTimeMillis - start}ms")
 }
 
 sealed trait CustomerState extends AggregateState[CustomerEvent, CustomerState]
