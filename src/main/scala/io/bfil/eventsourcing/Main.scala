@@ -6,8 +6,10 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
 import io.circe.generic.auto._
+import io.bfil.eventsourcing.circe.JsonEncoding
 import io.bfil.eventsourcing.mongodb._
 import io.bfil.eventsourcing.inmemory.InMemoryCache
+import io.bfil.eventsourcing.serialization._
 import org.mongodb.scala._
 import org.mongodb.scala.model._
 
@@ -67,14 +69,15 @@ sealed trait CustomerEvent
 case class CustomerCreated(id: Int, name: String, age: Int) extends CustomerEvent
 case class CustomerRenamed(id: Int, name: String) extends CustomerEvent
 
-class CustomerEventSerializer extends MongoJournalEventSerializer[CustomerEvent] {
-  def serialize(event: CustomerEvent): (String, String) = event match {
-    case event: CustomerCreated => ("CustomerCreated.V1", toJson(event))
-    case event: CustomerRenamed => ("CustomerRenamed.V1", toJson(event))
+class CustomerEventSerializer extends EventSerializer[CustomerEvent] {
+  import JsonEncoding._
+  def serialize(event: CustomerEvent) = event match {
+    case event: CustomerCreated => SerializedEvent("CustomerCreated.V1", encode(event))
+    case event: CustomerRenamed => SerializedEvent("CustomerRenamed.V1", encode(event))
   }
-  def deserialize(manifest: String, data: String): CustomerEvent = manifest match {
-    case "CustomerCreated.V1" => fromJson[CustomerCreated](data)
-    case "CustomerRenamed.V1" => fromJson[CustomerRenamed](data)
+  def deserialize(manifest: String, data: String) = manifest match {
+    case "CustomerCreated.V1" => decode[CustomerCreated](data)
+    case "CustomerRenamed.V1" => decode[CustomerRenamed](data)
   }
 }
 

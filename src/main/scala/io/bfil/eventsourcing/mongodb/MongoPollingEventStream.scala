@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter
 import scala.concurrent.{ExecutionContext, Future}
 
 import io.bfil.eventsourcing.{EventEnvelope, PollingEventStream}
+import io.bfil.eventsourcing.serialization.EventSerializer
 import org.mongodb.scala._
 import org.mongodb.scala.bson.{BsonDocument, BsonInt64, BsonString}
 import org.mongodb.scala.model._
@@ -14,7 +15,7 @@ class MongoPollingEventStream[Event](
   collection: MongoCollection[Document]
   )(implicit
     executionContext: ExecutionContext,
-    serializer: MongoJournalEventSerializer[Event]
+    serializer: EventSerializer[Event]
   ) extends PollingEventStream[Event] {
 
   def poll(offset: Long): Future[Seq[EventEnvelope[Event]]] =

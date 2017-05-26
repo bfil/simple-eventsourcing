@@ -5,13 +5,13 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.concurrent.{ExecutionContext, Future}
 
-import io.bfil.eventsourcing.util.FutureOps
+import util.FutureOps
 
 trait PollingEventStream[Event] extends EventStream[EventEnvelope[Event]] {
 
   private val streamOffset = new AtomicLong(0)
   private implicit lazy val scheduler = Executors.newScheduledThreadPool(2)
-  private implicit val executionContext = ExecutionContext.fromExecutor(scheduler)
+  private implicit lazy val executionContext = ExecutionContext.fromExecutor(scheduler)
 
   class PollingTask(f: EventEnvelope[Event] => Future[Unit]) extends Runnable {
     def run() = {

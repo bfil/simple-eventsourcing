@@ -14,20 +14,15 @@ class MongoOffsetStore(collection: MongoCollection[Document])
     collection.find(Filters.equal("offsetId", offsetId))
               .first()
               .toFuture()
-              .map { doc =>
-                Option(doc) match {
-                  case Some(doc) => doc[BsonInt64]("value").getValue()
-                  case None => 0
-                }
-              }
+              .map(doc => Option(doc) match {
+                case Some(doc) => doc[BsonInt64]("value").getValue()
+                case None => 0
+              })
 
   def save(offsetId: String, value: Long): Future[Unit] = {
-    val offset = Document(
-      "offsetId" -> offsetId,
-      "value" -> value
-    )
+    val offsetDocument = Document("offsetId" -> offsetId, "value" -> value)
     val updateOptions = new UpdateOptions().upsert(true)
-    collection.replaceOne(Filters.equal("offsetId", offsetId), offset, updateOptions)
+    collection.replaceOne(Filters.equal("offsetId", offsetId), offsetDocument, updateOptions)
               .toFuture()
               .map(completed => ())
   }
