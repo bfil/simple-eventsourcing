@@ -3,8 +3,9 @@ package io.bfil.eventsourcing
 import java.util.concurrent.{Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.generic.CanBuildFrom
 import scala.concurrent.{ExecutionContext, Future}
+
+import io.bfil.eventsourcing.util.FutureOps
 
 trait PollingEventStream[Event] extends EventStream[EventEnvelope[Event]] {
 
@@ -17,7 +18,7 @@ trait PollingEventStream[Event] extends EventStream[EventEnvelope[Event]] {
       val startOffset = streamOffset.get
       poll(startOffset)
         .flatMap { eventEnvelopes =>
-          traverseSequentially(eventEnvelopes) { eventEnvelope =>
+          FutureOps.traverseSequentially(eventEnvelopes) { eventEnvelope =>
             f(eventEnvelope) map { _ =>
               streamOffset.set(eventEnvelope.offset)
             }
@@ -35,10 +36,5 @@ trait PollingEventStream[Event] extends EventStream[EventEnvelope[Event]] {
     streamOffset.set(offset)
     scheduler.schedule(new PollingTask(f), 0, TimeUnit.SECONDS)
   }
-
-  private def traverseSequentially[A, B, M[X] <: TraversableOnce[X]](in: M[A])(fn: A => Future[B])(implicit cbf: CanBuildFrom[M[A], B, M[B]]): Future[M[B]] =
-    in.foldLeft(Future.successful(cbf(in))) { (fr, a) =>
-      for (r <- fr; b <- fn(a)) yield (r += b)
-    }.map(_.result())
 
 }

@@ -3,10 +3,11 @@ package io.bfil.eventsourcing.mongodb
 import java.time.{Instant, ZoneOffset}
 import java.time.format.DateTimeFormatter
 
-import scala.collection.generic.CanBuildFrom
 import scala.concurrent.{ExecutionContext, Future}
 
+import com.mongodb.MongoWriteException
 import io.bfil.eventsourcing.Journal
+import io.bfil.eventsourcing.util.FutureOps
 import org.mongodb.scala._
 import org.mongodb.scala.bson.{BsonDocument, BsonInt64, BsonString}
 import org.mongodb.scala.model._
@@ -21,9 +22,9 @@ class MongoJournal[Event](
   collection.createIndex(Indexes.ascending("offset"), new IndexOptions().unique(true)).toFuture()
   collection.createIndex(Indexes.ascending("aggregateId")).toFuture()
 
-  protected def retryOnDuplicateKeyException[T](f: => Future[T]): Future[T] =
+  private def retryOnDuplicateKeyException[T](f: => Future[T]): Future[T] =
     f recoverWith {
-      case ex: com.mongodb.MongoWriteException if ex.getError().getCode() == 11000 => retryOnDuplicateKeyException(f)
+      case ex: MongoWriteException if ex.getError().getCode() == 11000 => retryOnDuplicateKeyException(f)
     }
 
   private def nextOffset() = collection.find()
@@ -48,7 +49,7 @@ class MongoJournal[Event](
               }
 
   def write(aggregateId: String, events: Seq[Event]): Future[Unit] =
-    traverseSequentially(events) { event =>
+    FutureOps.traverseSequentially(events) { event =>
       val (manifest, data) = serializer.serialize(event)
       retryOnDuplicateKeyException {
         nextOffset() flatMap { offset =>
@@ -67,8 +68,4 @@ class MongoJournal[Event](
       }
     } map { _ => () }
 
-  private def traverseSequentially[A, B, M[X] <: TraversableOnce[X]](in: M[A])(fn: A => Future[B])(implicit cbf: CanBuildFrom[M[A], B, M[B]]): Future[M[B]] =
-    in.foldLeft(Future.successful(cbf(in))) { (fr, a) =>
-      for (r <- fr; b <- fn(a)) yield (r += b)
-    }.map(_.result())
 }
