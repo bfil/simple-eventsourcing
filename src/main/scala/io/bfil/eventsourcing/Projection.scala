@@ -1,8 +1,8 @@
 package io.bfil.eventsourcing
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
-abstract class Projection[Event](eventStream: EventStream[Event])(implicit executionContext: ExecutionContext) {
+abstract class Projection[Event](eventStream: EventStream[Event]) {
 
   def processEvent(f: Event): Future[Unit]
 
