@@ -24,7 +24,8 @@ object Main extends App {
 
   implicit val customerEventSerializer = new CustomerEventSerializer
 
-  val journal = new MongoJournal[CustomerEvent](journalCollection)
+  val journalWriter = new MongoJournalWriter(journalCollection)
+  val journal = new MongoJournal[CustomerEvent](journalCollection, journalWriter)
   val cache = new InMemoryCache[CustomerState]
 
   1 to 100 foreach { id =>
@@ -51,6 +52,7 @@ object Main extends App {
   }
 
   println(s"Projection run in ${System.currentTimeMillis - start}ms")
+  journalWriter.shutdown()
   journalEventStream.shutdown()
 }
 

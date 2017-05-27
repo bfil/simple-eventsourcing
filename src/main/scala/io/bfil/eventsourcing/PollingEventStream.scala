@@ -14,7 +14,7 @@ abstract class PollingEventStream[Event](pollingDelay: FiniteDuration = 1 second
   ) extends EventStream[EventEnvelope[Event]] {
 
   private val streamOffset = new AtomicLong(0)
-  private implicit lazy val executionContext = ExecutionContext.fromExecutor(scheduler)
+  private implicit val executionContext = ExecutionContext.fromExecutor(scheduler)
 
   def poll(offset: Long): Future[Seq[EventEnvelope[Event]]]
 
@@ -28,7 +28,7 @@ abstract class PollingEventStream[Event](pollingDelay: FiniteDuration = 1 second
     scheduler.awaitTermination(10, TimeUnit.SECONDS)
   }
 
-  class PollingTask(f: EventEnvelope[Event] => Future[Unit]) extends Runnable {
+  private class PollingTask(f: EventEnvelope[Event] => Future[Unit]) extends Runnable {
     def run() = if(!scheduler.isShutdown) {
       val startOffset = streamOffset.get
       poll(startOffset)
