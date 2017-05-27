@@ -20,11 +20,16 @@ abstract class PollingEventStream[Event](pollingDelay: FiniteDuration = 1 second
 
   def subscribe(f: EventEnvelope[Event] => Future[Unit], offset: Long = 0): Unit = {
     streamOffset.set(offset)
-    scheduler.schedule(new PollingTask(f), 0, TimeUnit.SECONDS)
+    if(!scheduler.isShutdown) scheduler.schedule(new PollingTask(f), 0, TimeUnit.SECONDS)
+  }
+
+  def shutdown() = {
+    scheduler.shutdown()
+    scheduler.awaitTermination(10, TimeUnit.SECONDS)
   }
 
   class PollingTask(f: EventEnvelope[Event] => Future[Unit]) extends Runnable {
-    def run() = {
+    def run() = if(!scheduler.isShutdown) {
       val startOffset = streamOffset.get
       poll(startOffset)
         .flatMap { eventEnvelopes =>

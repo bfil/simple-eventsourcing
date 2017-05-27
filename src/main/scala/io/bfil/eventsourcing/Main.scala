@@ -51,6 +51,7 @@ object Main extends App {
   }
 
   println(s"Projection run in ${System.currentTimeMillis - start}ms")
+  journalEventStream.shutdown()
 }
 
 sealed trait CustomerState extends AggregateState[CustomerEvent, CustomerState]
