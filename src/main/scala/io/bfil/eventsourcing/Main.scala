@@ -3,7 +3,8 @@ package io.bfil.eventsourcing
 import java.util.logging.{Level, Logger}
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
 
 import io.circe.generic.auto._
 import io.bfil.eventsourcing.circe.JsonEncoding
@@ -44,14 +45,11 @@ object Main extends App {
 
   val start = System.currentTimeMillis
   customersProjection.run()
-
-  import scala.concurrent.Await
-  import scala.concurrent.duration._
   while (Await.result(offsetStore.load("customers-projection"), 3 second) != 300) {
     Thread.sleep(100)
   }
-
   println(s"Projection run in ${System.currentTimeMillis - start}ms")
+
   journalWriter.shutdown()
   journalEventStream.shutdown()
 }
@@ -120,18 +118,15 @@ class CustomersProjection(
   ) extends ResumableProjection[CustomerEvent](eventStream, offsetStore) {
   val projectionId = "customers-projection"
 
-  collection.createIndex(Indexes.ascending("id")).toFuture()
+  collection.createIndex(Indexes.ascending("id"), new IndexOptions().unique(true)).toFuture()
 
   def processEvent(event: CustomerEvent): Future[Unit] = event match {
     case CustomerCreated(id, name, age) =>
-      val customer = Document("id" -> id, "name" -> name, "age" -> age)
-      val updateOptions = new UpdateOptions().upsert(true)
-      collection.updateOne(Filters.equal("id", id), Document("$set" -> customer), updateOptions)
+      collection.insertOne(Document("id" -> id, "name" -> name, "age" -> age))
                 .toFuture()
                 .map(completed => ())
     case CustomerRenamed(id, name) =>
-      val customer = Document("id" -> id, "name" -> name)
-      collection.updateOne(Filters.equal("id", id), Document("$set" -> customer))
+      collection.updateOne(Filters.equal("id", id), Document("$set" -> Document("name" -> name)))
                 .toFuture()
                 .map(completed => ())
   }
