@@ -18,7 +18,7 @@ class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Event
     "generate a customer count" in {
       customerCountProjection.run()
       1 to 10 map { id =>
-        eventStream.publish(CustomerCreated(id.toString, "Bruno"))
+        eventStream.publish(EventEnvelope(id, "customer-1", CustomerCreated(id, "Bruno", 32)))
       }
       eventually {
         customerCountProjection.customerCount shouldBe 10
@@ -28,17 +28,15 @@ class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Event
   }
 
   sealed trait CustomerEvent
-  case class CustomerCreated(id: String, name: String) extends CustomerEvent
-  case class CustomerRenamed(name: String) extends CustomerEvent
-
-  case class Customer(id: String, name: String)
+  case class CustomerCreated(id: Int, name: String, age: Int) extends CustomerEvent
+  case class CustomerRenamed(id: Int, name: String) extends CustomerEvent
 
   class CustomerCountProjection(eventStream: EventStream[CustomerEvent]) extends Projection[CustomerEvent](eventStream) {
     var customerCount = 0
 
     def processEvent(event: CustomerEvent): Future[Unit] = event match {
-      case CustomerCreated(id, name) => Future.successful(customerCount += 1)
-      case                         _ => Future.successful(())
+      case CustomerCreated(id, name, age) => Future.successful(customerCount += 1)
+      case                              _ => Future.successful(())
     }
   }
 }

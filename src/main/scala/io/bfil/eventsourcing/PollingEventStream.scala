@@ -11,7 +11,7 @@ import util.FutureOps
 
 abstract class PollingEventStream[Event](pollingDelay: FiniteDuration = 1 second)(
   implicit scheduler: ScheduledExecutorService = Executors.newScheduledThreadPool(1)
-  ) extends EventStream[EventEnvelope[Event]] {
+  ) extends EventStream[Event] {
 
   private val streamOffset = new AtomicLong(0)
   private implicit val executionContext = ExecutionContext.fromExecutor(scheduler)

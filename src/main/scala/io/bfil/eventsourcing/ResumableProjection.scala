@@ -4,7 +4,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
 abstract class ResumableProjection[Event](
-  eventStream: EventStream[EventEnvelope[Event]],
+  eventStream: EventStream[Event],
   offsetStore: OffsetStore
   )(implicit executionContext: ExecutionContext) {
 

@@ -115,7 +115,7 @@ class CustomerAggregate(id: Int, journal: Journal[CustomerEvent], cache: Cache[C
 
 class CustomersProjection(
   collection: MongoCollection[Document],
-  eventStream: EventStream[EventEnvelope[CustomerEvent]],
+  eventStream: EventStream[CustomerEvent],
   offsetStore: OffsetStore
   ) extends ResumableProjection[CustomerEvent](eventStream, offsetStore) {
   val projectionId = "customers-projection"
