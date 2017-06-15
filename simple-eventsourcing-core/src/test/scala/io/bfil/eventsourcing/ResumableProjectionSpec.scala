@@ -12,11 +12,11 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
   var customerCount = 0
 
   val offsetStore = new InMemoryOffsetStore
-  val eventStream = new InMemoryEventStream[CustomerEvent]()
 
   "ResumableProjection" should {
 
     "generate a customer count and store the last offset in the offset store" in {
+      val eventStream = new InMemoryEventStream[CustomerEvent]()
       val customerCountProjection = new CustomerCountResumableProjection(eventStream, offsetStore)
       customerCountProjection.run()
       1 to 10 map { id =>
@@ -29,9 +29,11 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
     }
 
     "resume from the last saved offset" in {
+      val eventStream = new InMemoryEventStream[CustomerEvent]()
       val customerCountProjection = new CustomerCountResumableProjection(eventStream, offsetStore)
       customerCountProjection.run()
-      11 to 20 map { id =>
+      customerCount shouldBe 10
+      1 to 20 map { id =>
         eventStream.publish(EventEnvelope(id, "customer-1", CustomerCreated(id, "Bruno", 32)))
       }
       eventually {

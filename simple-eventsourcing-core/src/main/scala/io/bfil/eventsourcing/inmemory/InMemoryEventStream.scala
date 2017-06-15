@@ -11,6 +11,9 @@ class InMemoryEventStream[Event] extends EventStream[Event] {
   def publish(event: EventEnvelope[Event]): Unit = queue.put(event)
   def subscribe(f: EventEnvelope[Event] => Future[Unit], offset: Long = 0): Unit =
     new Thread(new Runnable {
-      def run() = while(true) f(queue.take())
+      def run() = while(true) {
+        val envelope = queue.take()
+        if (envelope.offset > offset) f(envelope)
+      }
     }).start()
 }
