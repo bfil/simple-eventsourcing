@@ -7,7 +7,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 import io.bfil.eventsourcing.Journal
 import io.bfil.eventsourcing.serialization.EventSerializer
-import io.bfil.eventsourcing.util.FutureOps
+import io.bfil.eventsourcing.concurrent.FutureOps
 import org.mongodb.scala._
 import org.mongodb.scala.bson.{BsonDocument, BsonString}
 import org.mongodb.scala.model._

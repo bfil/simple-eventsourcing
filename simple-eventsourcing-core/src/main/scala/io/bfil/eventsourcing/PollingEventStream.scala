@@ -7,7 +7,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.{Failure, Success}
 
-import util.FutureOps
+import concurrent.FutureOps
 
 abstract class PollingEventStream[Event](pollingDelay: FiniteDuration = 1 second)(
   implicit scheduler: ScheduledExecutorService = Executors.newScheduledThreadPool(1)

@@ -1,4 +1,4 @@
-package io.bfil.eventsourcing.util
+package io.bfil.eventsourcing.concurrent
 
 import scala.collection.generic.CanBuildFrom
 import scala.concurrent.{ExecutionContext, Future}
