@@ -50,7 +50,7 @@ class CachedAggregateSpec extends WordSpec with Matchers with ScalaFutures with 
   }
   case class BankAccount(id: Int, name: String, balance: Int) extends BankAccountState {
     val eventHandler = EventHandler {
-      case MoneyWithdrawn(id, amount) => copy(balance = balance - amount)
+      case MoneyWithdrawn(_, amount) => copy(balance = balance - amount)
     }
   }
 

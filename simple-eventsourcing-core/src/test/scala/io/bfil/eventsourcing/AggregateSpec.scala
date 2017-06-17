@@ -55,15 +55,15 @@ class AggregateSpec extends WordSpec with Matchers with ScalaFutures with Single
 
     def onEvent(state: Option[BankAccount], event: BankAccountEvent): Option[BankAccount] = event match {
       case BankAccountOpened(id, name, balance) => Some(BankAccount(id, name, balance))
-      case MoneyWithdrawn(id, amount)           => state.map(a => a.copy(balance = a.balance - amount))
+      case MoneyWithdrawn(_, amount)            => state.map(a => a.copy(balance = a.balance - amount))
     }
 
     def open(name: String, balance: Int): Future[BankAccount] =
       for {
         (state, lastSequenceNr) <- recover
         newState <- state match {
-          case Some(bankAccount) => Future.failed(new Exception(s"Bank account with id '$id' already exists"))
-          case None              => persist(state, lastSequenceNr, BankAccountOpened(id, name, balance))
+          case Some(_) => Future.failed(new Exception(s"Bank account with id '$id' already exists"))
+          case None    => persist(state, lastSequenceNr, BankAccountOpened(id, name, balance))
         }
       } yield newState.get
 

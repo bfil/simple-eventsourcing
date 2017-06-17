@@ -31,12 +31,11 @@ object Main extends App {
 
   1 to 100 foreach { id =>
     val bankAccount = new BankAccountAggregate(id, journal, cache)
-    (for {
+    for {
       cust <- bankAccount.open("Bruno", 1000)
       name <- bankAccount.withdraw(100)
       name <- bankAccount.withdraw(100)
-    } yield ()).failed foreach println
-    bankAccount.state
+    } yield ()
   }
 
   val offsetStore = new MongoOffsetStore(offsetsCollection)
@@ -74,11 +73,11 @@ class BankAccountEventSerializer extends EventSerializer[BankAccountEvent] {
   import JsonEncoding._
   def serialize(event: BankAccountEvent) = event match {
     case event: BankAccountOpened => SerializedEvent("BankAccountOpened.V1", encode(event))
-    case event: MoneyWithdrawn => SerializedEvent("MoneyWithdrawn.V1", encode(event))
+    case event: MoneyWithdrawn    => SerializedEvent("MoneyWithdrawn.V1", encode(event))
   }
   def deserialize(manifest: String, data: String) = manifest match {
     case "BankAccountOpened.V1" => decode[BankAccountOpened](data)
-    case "MoneyWithdrawn.V1" => decode[MoneyWithdrawn](data)
+    case "MoneyWithdrawn.V1"    => decode[MoneyWithdrawn](data)
   }
 }
 
@@ -105,7 +104,7 @@ class BankAccountAggregate(id: Int, journal: Journal[BankAccountEvent], cache: C
 
   def withdraw(amount: Int): Future[Int] = retry(1) {
     for {
-      bankAccount <- recoverBankAccount
+      bankAccount        <- recoverBankAccount
       updatedBankAccount <-
         if(bankAccount.balance >= amount) {
           persist(bankAccount, MoneyWithdrawn(id, amount)).mapStateTo[BankAccount]
