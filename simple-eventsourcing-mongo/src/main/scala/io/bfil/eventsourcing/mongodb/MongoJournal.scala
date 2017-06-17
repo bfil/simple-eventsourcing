@@ -4,8 +4,7 @@ import java.time.{Instant, ZoneOffset}
 import java.time.format.DateTimeFormatter
 
 import scala.concurrent.{ExecutionContext, Future}
-
-import io.bfil.eventsourcing.Journal
+import io.bfil.eventsourcing.{EventUpcaster, Journal}
 import io.bfil.eventsourcing.serialization.EventSerializer
 import io.bfil.eventsourcing.concurrent.FutureOps
 import org.mongodb.scala._
@@ -17,7 +16,8 @@ class MongoJournal[Event](
   journalWriter: MongoJournalWriter
   )(implicit
     executionContext: ExecutionContext,
-    serializer: EventSerializer[Event]
+    serializer: EventSerializer[Event],
+    upcaster: EventUpcaster[Event]
   ) extends Journal[Event] {
 
   collection.createIndex(Indexes.ascending("offset"), new IndexOptions().unique(true)).toFuture()
@@ -27,10 +27,11 @@ class MongoJournal[Event](
     collection.find(Document("aggregateId" -> aggregateId))
               .sort(Sorts.ascending("offset"))
               .toFuture()
-              .map(docs => docs.map { doc =>
+              .map(docs => docs.flatMap { doc =>
                 val manifest = doc[BsonString]("manifest").getValue()
                 val data = doc[BsonDocument]("data")
-                serializer.deserialize(manifest, data.toJson())
+                val event = serializer.deserialize(manifest, data.toJson())
+                upcaster.upcastEvent(event)
               })
 
   def write(aggregateId: String, events: Seq[Event]): Future[Unit] =

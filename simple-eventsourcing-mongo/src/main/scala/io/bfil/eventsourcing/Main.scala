@@ -24,6 +24,7 @@ object Main extends App {
   val bankAccountsCollection = database.getCollection("bankAccounts")
 
   implicit val bankAccountEventSerializer = new BankAccountEventSerializer
+  implicit val bankAccountEventUpcaster = new BankAccountEventUpcaster
 
   val journalWriter = new MongoJournalWriter(journalCollection)
   val journal = new MongoJournal[BankAccountEvent](journalCollection, journalWriter)
@@ -69,15 +70,26 @@ sealed trait BankAccountEvent
 case class BankAccountOpened(id: Int, name: String, balance: Int) extends BankAccountEvent
 case class MoneyWithdrawn(id: Int, amount: Int) extends BankAccountEvent
 
+case class MoneyWithdrawnV1(id: Int, amount: Int, balance: Int) extends BankAccountEvent
+
 class BankAccountEventSerializer extends EventSerializer[BankAccountEvent] {
   import JsonEncoding._
   def serialize(event: BankAccountEvent) = event match {
     case event: BankAccountOpened => SerializedEvent("BankAccountOpened.V1", encode(event))
-    case event: MoneyWithdrawn    => SerializedEvent("MoneyWithdrawn.V1", encode(event))
+    case event: MoneyWithdrawnV1  => SerializedEvent("MoneyWithdrawn.V1", encode(event))
+    case event: MoneyWithdrawn    => SerializedEvent("MoneyWithdrawn.V2", encode(event))
   }
   def deserialize(manifest: String, data: String) = manifest match {
     case "BankAccountOpened.V1" => decode[BankAccountOpened](data)
-    case "MoneyWithdrawn.V1"    => decode[MoneyWithdrawn](data)
+    case "MoneyWithdrawn.V1"    => decode[MoneyWithdrawnV1](data)
+    case "MoneyWithdrawn.V2"    => decode[MoneyWithdrawn](data)
+  }
+}
+
+class BankAccountEventUpcaster extends EventUpcaster[BankAccountEvent] {
+  def upcastEvent(event: BankAccountEvent): Seq[BankAccountEvent] = event match {
+    case MoneyWithdrawnV1(id, amount, _) => Seq(MoneyWithdrawn(id, amount))
+    case _                               => Seq(event)
   }
 }
 
@@ -131,5 +143,6 @@ class BankAccountsProjection(
       collection.updateOne(Filters.equal("id", id), Document("$inc" -> Document("balance" -> -amount)))
                 .toFuture()
                 .map(completed => ())
+    case MoneyWithdrawnV1(id, amount, _) => processEvent(MoneyWithdrawn(id, amount))
   }
 }
