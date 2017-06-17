@@ -106,7 +106,10 @@ class BankAccountAggregate(id: Int, journal: Journal[BankAccountEvent], cache: C
   def withdraw(amount: Int): Future[Int] = retry(1) {
     for {
       bankAccount <- recoverBankAccount
-      updatedBankAccount <- persist(bankAccount, MoneyWithdrawn(id, amount)).mapStateTo[BankAccount]
+      updatedBankAccount <-
+        if(bankAccount.balance >= amount) {
+          persist(bankAccount, MoneyWithdrawn(id, amount)).mapStateTo[BankAccount]
+        } else Future.failed(new Exception(s"Not enough funds in account with id '$id'"))
     } yield updatedBankAccount.balance
   }
 }

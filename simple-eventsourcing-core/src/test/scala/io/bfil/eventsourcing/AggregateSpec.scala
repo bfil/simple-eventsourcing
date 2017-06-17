@@ -34,6 +34,12 @@ class AggregateSpec extends WordSpec with Matchers with ScalaFutures with Single
       journal.read("bank-account-1").futureValue.length shouldBe 3
     }
 
+    "fail to withdraw money from a bank account when the balance is too low" in {
+      an[Exception] should be thrownBy bankAccount.withdraw(1000).futureValue
+      bankAccount.state.futureValue shouldBe BankAccount(1, "Bruno", 800)
+      journal.read("bank-account-1").futureValue.length shouldBe 3
+    }
+
   }
 
   sealed trait BankAccountState extends AggregateState[BankAccountEvent, BankAccountState]
@@ -76,7 +82,10 @@ class AggregateSpec extends WordSpec with Matchers with ScalaFutures with Single
     def withdraw(amount: Int): Future[Int] = retry(2) {
       for {
         bankAccount        <- recoverBankAccount
-        updatedBankAccount <- persist(bankAccount, MoneyWithdrawn(id, amount)).mapStateTo[BankAccount]
+        updatedBankAccount <-
+          if(bankAccount.balance >= amount) {
+            persist(bankAccount, MoneyWithdrawn(id, amount)).mapStateTo[BankAccount]
+          } else Future.failed(new Exception(s"Not enough funds in account with id '$id'"))
       } yield updatedBankAccount.balance
     }
   }

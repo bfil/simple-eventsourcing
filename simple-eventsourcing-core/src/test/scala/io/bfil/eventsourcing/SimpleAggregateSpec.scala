@@ -27,6 +27,12 @@ class SimpleAggregateSpec extends WordSpec with Matchers with ScalaFutures with 
       journal.read("bank-account-1").futureValue.length shouldBe 2
     }
 
+    "fail to withdraw money from a bank account when the balance is too low" in {
+      an[Exception] should be thrownBy bankAccount.withdraw(1000).futureValue
+      bankAccount.recover.futureValue shouldBe Some(BankAccount(1, "Bruno", 900))
+      journal.read("bank-account-1").futureValue.length shouldBe 2
+    }
+
   }
 
   sealed trait BankAccountEvent
@@ -49,13 +55,21 @@ class SimpleAggregateSpec extends WordSpec with Matchers with ScalaFutures with 
     def open(name: String, balance: Int): Future[BankAccount] =
       for {
         state    <- recover
-        newState <- persist(state, BankAccountOpened(id, name, balance))
+        newState <- state match {
+          case Some(bankAccount) => Future.failed(new Exception(s"Bank account with id '$id' already exists"))
+          case None              => persist(state, BankAccountOpened(id, name, balance))
+        }
       } yield newState.get
 
     def withdraw(amount: Int): Future[Int] =
       for {
         state    <- recover
-        newState <- persist(state, MoneyWithdrawn(id, amount))
+        newState <- state match {
+          case Some(bankAccount) =>
+            if(bankAccount.balance >= amount) persist(state, MoneyWithdrawn(id, amount))
+            else Future.failed(new Exception(s"Not enough funds in account with id '$id'"))
+          case None => Future.failed(new Exception(s"Bank account with id '$id' not found"))
+        }
       } yield newState.get.balance
   }
 }
