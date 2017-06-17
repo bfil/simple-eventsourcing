@@ -1,64 +1,35 @@
 package io.bfil.eventsourcing
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.reflect.ClassTag
-import scala.util.control.NonFatal
 
-abstract class Aggregate[Event, State <: AggregateState[Event, State]](
-  journal: Journal[Event], cache: Cache[State]
-  )(implicit executionContext: ExecutionContext) {
+abstract class Aggregate[Event, State](journal: Journal[(Event, Long)])(implicit executionContext: ExecutionContext) {
 
   val aggregateId: String
   protected val initialState: State
 
-  def state(): Future[State] = recover
-
-  private def computeState(currentState: State, events: Seq[Event]): State =
-    events.foldLeft(currentState)(onEvent)
+  def onEvent(state: State, event: Event): State
 
   protected def retry[T](n: Int)(f: => Future[T]): Future[T] =
     f recoverWith {
       case ex: OptimisticLockException if n > 0 => retry(n - 1)(f)
     }
 
-  protected def recover(): Future[State] = retry(1) {
+  def recover(): Future[(State, Long)] =
     for {
-      cachedState <- cache.get(aggregateId)
-      state <- cachedState match {
-        case Some(cachedState) => Future.successful(cachedState)
-        case None =>
-          for {
-            events <- journal.read(aggregateId)
-            journalState = computeState(initialState, events)
-            _ <- cache.put(aggregateId, None, journalState)
-          } yield journalState
+      events <- journal.read(aggregateId)
+      (state, lastSequenceNr) = events.foldLeft((initialState, 0L)) {
+        case ((state, _), (event, sequenceNr)) => (onEvent(state, event), sequenceNr)
       }
-    } yield state
-  }
+    } yield (state, lastSequenceNr)
 
-  protected def persist(currentState: State, events: Event*): Future[State] = {
-    val newState = computeState(currentState, events)
+  def persist(currentState: State, lastSequenceNr: Long, events: Event*): Future[State] = {
+    val eventsWithSequenceNumbers = events.zipWithIndex.map { case (event, i) =>
+      (event, lastSequenceNr + i + 1)
+    }
     for {
-      _ <- cache.put(aggregateId, Some(currentState), newState)
-      _ <- journal.write(aggregateId, events) recoverWith {
-        case NonFatal(ex) => invalidateCachedStateAndFailWith(ex)
-      }
+      _ <- journal.write(aggregateId, eventsWithSequenceNumbers)
+      newState = events.foldLeft(currentState)(onEvent)
     } yield newState
   }
 
-  protected def onEvent(state: State, event: Event): State =
-    (state.eventHandler orElse unexpectedEventHandler(state))(event)
-
-  private def invalidateCachedStateAndFailWith(ex: Throwable) =
-    cache.remove(aggregateId)
-         .flatMap(_ => Future.failed(ex))
-         .recoverWith { case NonFatal(_) => Future.failed(ex) }
-
-  protected def unexpectedEventHandler(state: State): State#EventHandler = {
-    case event => throw new UnexpectedEventException(event, state)
-  }
-
-  protected implicit class MappableFutureState(future: Future[State]) {
-    def mapStateTo[T <: State : ClassTag] = future.mapTo[T]
-  }
 }

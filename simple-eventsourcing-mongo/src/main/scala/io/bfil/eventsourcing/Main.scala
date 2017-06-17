@@ -83,7 +83,7 @@ class BankAccountEventSerializer extends EventSerializer[BankAccountEvent] {
 }
 
 class BankAccountAggregate(id: Int, journal: Journal[BankAccountEvent], cache: Cache[BankAccountState])
-  extends Aggregate[BankAccountEvent, BankAccountState](journal, cache) {
+  extends CachedAggregate[BankAccountEvent, BankAccountState](journal, cache) {
 
   val aggregateId = s"bank-account-$id"
   val initialState = Empty

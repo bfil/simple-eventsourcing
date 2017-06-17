@@ -54,7 +54,7 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
 
     def processEvent(event: BankAccountEvent): Future[Unit] = event match {
       case BankAccountOpened(id, name, balance) => Future.successful(bankAccountCount += 1)
-      case                              _ => Future.successful(())
+      case _                                    => Future.successful(())
     }
   }
 }
