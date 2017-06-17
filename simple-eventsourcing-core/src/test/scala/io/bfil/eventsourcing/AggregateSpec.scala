@@ -9,75 +9,75 @@ import org.scalatest.concurrent.ScalaFutures
 
 class AggregateSpec extends WordSpec with Matchers with ScalaFutures with SingleThreadedExecutionContext {
 
-  val journal: Journal[CustomerEvent] = new InMemoryJournal[CustomerEvent]
-  val cache: Cache[CustomerState] = new InMemoryCache[CustomerState]
+  val journal: Journal[BankAccountEvent] = new InMemoryJournal[BankAccountEvent]
+  val cache: Cache[BankAccountState] = new InMemoryCache[BankAccountState]
 
-  val customer = new CustomerAggregate(1, journal, cache)
+  val bankAccount = new BankAccountAggregate(1, journal, cache)
 
   "Aggregate" should {
 
-    "create a customer correctly and throw an OptimisticLockException" in {
-      val result1 = customer.create("Bruno", 32)
-      val result2 = customer.create("Bruno Mars", 32)
-      result1.futureValue shouldBe Customer(1, "Bruno", 32)
+    "open a bank account and throw an OptimisticLockException" in {
+      val result1 = bankAccount.open("Bruno", 1000)
+      val result2 = bankAccount.open("Bruno Mars", 1000)
+      result1.futureValue shouldBe BankAccount(1, "Bruno", 1000)
       result2.failed.futureValue shouldBe an [OptimisticLockException]
-      customer.state.futureValue shouldBe Customer(1, "Bruno", 32)
-      journal.read("customer-1").futureValue.length shouldBe 1
+      bankAccount.state.futureValue shouldBe BankAccount(1, "Bruno", 1000)
+      journal.read("bank-account-1").futureValue.length shouldBe 1
     }
 
-    "rename a customer correctly and retry on OptimisticLockException" in {
-      val result1 = customer.rename("Bruno Mars")
-      val result2 = customer.rename("Bruno")
-      result1.futureValue shouldBe "Bruno Mars"
-      result2.futureValue shouldBe "Bruno"
-      customer.state.futureValue shouldBe Customer(1, "Bruno", 32)
-      journal.read("customer-1").futureValue.length shouldBe 3
+    "withdraw money from a bank account and retry on OptimisticLockException" in {
+      val result1 = bankAccount.withdraw(100)
+      val result2 = bankAccount.withdraw(100)
+      result1.futureValue shouldBe 900
+      result2.futureValue shouldBe 800
+      bankAccount.state.futureValue shouldBe BankAccount(1, "Bruno", 800)
+      journal.read("bank-account-1").futureValue.length shouldBe 3
     }
 
   }
 
-  sealed trait CustomerState extends AggregateState[CustomerEvent, CustomerState]
-  case object Empty extends CustomerState {
+  sealed trait BankAccountState extends AggregateState[BankAccountEvent, BankAccountState]
+  case object Empty extends BankAccountState {
     val eventHandler = EventHandler {
-      case CustomerCreated(id, name, age) => Customer(id, name, age)
+      case BankAccountOpened(id, name, balance) => BankAccount(id, name, balance)
     }
   }
-  case class Customer(id: Int, name: String, age: Int) extends CustomerState {
+  case class BankAccount(id: Int, name: String, balance: Int) extends BankAccountState {
     val eventHandler = EventHandler {
-      case CustomerRenamed(id, name) => copy(name = name)
+      case MoneyWithdrawn(id, amount) => copy(balance = balance - amount)
     }
   }
 
-  sealed trait CustomerEvent
-  case class CustomerCreated(id: Int, name: String, age: Int) extends CustomerEvent
-  case class CustomerRenamed(id: Int, name: String) extends CustomerEvent
+  sealed trait BankAccountEvent
+  case class BankAccountOpened(id: Int, name: String, balance: Int) extends BankAccountEvent
+  case class MoneyWithdrawn(id: Int, amount: Int) extends BankAccountEvent
 
-  class CustomerAggregate(id: Int, journal: Journal[CustomerEvent], cache: Cache[CustomerState])
-    extends Aggregate[CustomerEvent, CustomerState](journal, cache) {
+  class BankAccountAggregate(id: Int, journal: Journal[BankAccountEvent], cache: Cache[BankAccountState])
+    extends Aggregate[BankAccountEvent, BankAccountState](journal, cache) {
 
-    val aggregateId = s"customer-$id"
+    val aggregateId = s"bank-account-$id"
     val initialState = Empty
 
-    private def recoverCustomer(): Future[Customer] =
+    private def recoverBankAccount(): Future[BankAccount] =
       recover map {
-        case customer: Customer => customer
-        case _ => throw new Exception(s"Customer with id '$id' not found")
+        case bankAccount: BankAccount => bankAccount
+        case _                        => throw new Exception(s"Bank account with id '$id' not found")
       }
 
-    def create(name: String, age: Int): Future[Customer] =
+    def open(name: String, balance: Int): Future[BankAccount] =
       for {
-        state <- recover
-        customer <- state match {
-          case Empty => persist(state, CustomerCreated(id, name, age)).mapStateTo[Customer]
-          case _     => Future.failed(new Exception(s"Customer with id '$id' already exists"))
+        state       <- recover
+        bankAccount <- state match {
+          case Empty => persist(state, BankAccountOpened(id, name, balance)).mapStateTo[BankAccount]
+          case _     => Future.failed(new Exception(s"Bank account with id '$id' already exists"))
         }
-      } yield customer
+      } yield bankAccount
 
-    def rename(name: String): Future[String] = retry(2) {
+    def withdraw(amount: Int): Future[Int] = retry(2) {
       for {
-        customer <- recoverCustomer
-        renamedCustomer <- persist(customer, CustomerRenamed(id, name)).mapStateTo[Customer]
-      } yield renamedCustomer.name
+        bankAccount        <- recoverBankAccount
+        updatedBankAccount <- persist(bankAccount, MoneyWithdrawn(id, amount)).mapStateTo[BankAccount]
+      } yield updatedBankAccount.balance
     }
   }
 }

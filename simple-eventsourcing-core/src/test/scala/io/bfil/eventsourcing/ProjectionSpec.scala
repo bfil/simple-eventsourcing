@@ -9,34 +9,34 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Eventually with SingleThreadedExecutionContext {
 
-  val eventStream = new InMemoryEventStream[CustomerEvent]()
+  val eventStream = new InMemoryEventStream[BankAccountEvent]()
 
-  val customerCountProjection = new CustomerCountProjection(eventStream)
+  val projection = new BankAccountCountProjection(eventStream)
 
   "Projection" should {
 
-    "generate a customer count" in {
-      customerCountProjection.run()
+    "count the number of opened bank accounts" in {
+      projection.run()
       1 to 10 map { id =>
-        eventStream.publish(EventEnvelope(id, "customer-1", CustomerCreated(id, "Bruno", 32)))
+        eventStream.publish(EventEnvelope(id, "bank-account-1", BankAccountOpened(id, "Bruno", 1000)))
       }
       eventually {
-        customerCountProjection.customerCount shouldBe 10
+        projection.bankAccountCount shouldBe 10
       }
     }
 
   }
 
-  sealed trait CustomerEvent
-  case class CustomerCreated(id: Int, name: String, age: Int) extends CustomerEvent
-  case class CustomerRenamed(id: Int, name: String) extends CustomerEvent
+  sealed trait BankAccountEvent
+  case class BankAccountOpened(id: Int, name: String, balance: Int) extends BankAccountEvent
+  case class MoneyWithdrawn(id: Int, amount: Int) extends BankAccountEvent
 
-  class CustomerCountProjection(eventStream: EventStream[CustomerEvent]) extends Projection[CustomerEvent](eventStream) {
-    var customerCount = 0
+  class BankAccountCountProjection(eventStream: EventStream[BankAccountEvent]) extends Projection[BankAccountEvent](eventStream) {
+    var bankAccountCount = 0
 
-    def processEvent(event: CustomerEvent): Future[Unit] = event match {
-      case CustomerCreated(id, name, age) => Future.successful(customerCount += 1)
-      case                              _ => Future.successful(())
+    def processEvent(event: BankAccountEvent): Future[Unit] = event match {
+      case BankAccountOpened(id, name, balance) => Future.successful(bankAccountCount += 1)
+      case                                      _ => Future.successful(())
     }
   }
 }

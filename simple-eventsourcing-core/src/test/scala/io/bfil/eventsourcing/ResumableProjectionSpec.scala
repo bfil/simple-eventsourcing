@@ -9,51 +9,51 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures with Eventually with SingleThreadedExecutionContext {
 
-  var customerCount = 0
+  var bankAccountCount = 0
 
   val offsetStore = new InMemoryOffsetStore
 
   "ResumableProjection" should {
 
-    "generate a customer count and store the last offset in the offset store" in {
-      val eventStream = new InMemoryEventStream[CustomerEvent]()
-      val customerCountProjection = new CustomerCountResumableProjection(eventStream, offsetStore)
-      customerCountProjection.run()
+    "count the number of opened bank accounts and store the last offset in the offset store" in {
+      val eventStream = new InMemoryEventStream[BankAccountEvent]()
+      val projection = new BankAccountCountResumableProjection(eventStream, offsetStore)
+      projection.run()
       1 to 10 map { id =>
-        eventStream.publish(EventEnvelope(id, "customer-1", CustomerCreated(id, "Bruno", 32)))
+        eventStream.publish(EventEnvelope(id, "bank-account-1", BankAccountOpened(id, "Bruno", 1000)))
       }
       eventually {
-        customerCount shouldBe 10
-        offsetStore.load("customer-count").futureValue shouldBe 10
+        bankAccountCount shouldBe 10
+        offsetStore.load("bank-account-count").futureValue shouldBe 10
       }
     }
 
     "resume from the last saved offset" in {
-      val eventStream = new InMemoryEventStream[CustomerEvent]()
-      val customerCountProjection = new CustomerCountResumableProjection(eventStream, offsetStore)
-      customerCountProjection.run()
-      customerCount shouldBe 10
+      val eventStream = new InMemoryEventStream[BankAccountEvent]()
+      val projection = new BankAccountCountResumableProjection(eventStream, offsetStore)
+      projection.run()
+      bankAccountCount shouldBe 10
       1 to 20 map { id =>
-        eventStream.publish(EventEnvelope(id, "customer-1", CustomerCreated(id, "Bruno", 32)))
+        eventStream.publish(EventEnvelope(id, "bank-account-1", BankAccountOpened(id, "Bruno", 1000)))
       }
       eventually {
-        customerCount shouldBe 20
-        offsetStore.load("customer-count").futureValue shouldBe 20
+        bankAccountCount shouldBe 20
+        offsetStore.load("bank-account-count").futureValue shouldBe 20
       }
     }
 
   }
 
-  sealed trait CustomerEvent
-  case class CustomerCreated(id: Int, name: String, age: Int) extends CustomerEvent
-  case class CustomerRenamed(id: Int, name: String) extends CustomerEvent
+  sealed trait BankAccountEvent
+  case class BankAccountOpened(id: Int, name: String, balance: Int) extends BankAccountEvent
+  case class MoneyWithdrawn(id: Int, amount: Int) extends BankAccountEvent
 
-  class CustomerCountResumableProjection(eventStream: EventStream[CustomerEvent], offsetStore: OffsetStore)
-    extends ResumableProjection[CustomerEvent](eventStream, offsetStore) {
-    val projectionId = "customer-count"
+  class BankAccountCountResumableProjection(eventStream: EventStream[BankAccountEvent], offsetStore: OffsetStore)
+    extends ResumableProjection[BankAccountEvent](eventStream, offsetStore) {
+    val projectionId = "bank-account-count"
 
-    def processEvent(event: CustomerEvent): Future[Unit] = event match {
-      case CustomerCreated(id, name, age) => Future.successful(customerCount += 1)
+    def processEvent(event: BankAccountEvent): Future[Unit] = event match {
+      case BankAccountOpened(id, name, balance) => Future.successful(bankAccountCount += 1)
       case                              _ => Future.successful(())
     }
   }

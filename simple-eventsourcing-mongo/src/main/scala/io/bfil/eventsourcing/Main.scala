@@ -21,31 +21,31 @@ object Main extends App {
   val database = mongoClient.getDatabase("simple-eventsourcing")
   val journalCollection = database.getCollection("journal")
   val offsetsCollection = database.getCollection("offsets")
-  val customersCollection = database.getCollection("customers")
+  val bankAccountsCollection = database.getCollection("bankAccounts")
 
-  implicit val customerEventSerializer = new CustomerEventSerializer
+  implicit val bankAccountEventSerializer = new BankAccountEventSerializer
 
   val journalWriter = new MongoJournalWriter(journalCollection)
-  val journal = new MongoJournal[CustomerEvent](journalCollection, journalWriter)
-  val cache = new InMemoryCache[CustomerState]
+  val journal = new MongoJournal[BankAccountEvent](journalCollection, journalWriter)
+  val cache = new InMemoryCache[BankAccountState]
 
   1 to 100 foreach { id =>
-    val customer = new CustomerAggregate(id, journal, cache)
+    val bankAccount = new BankAccountAggregate(id, journal, cache)
     (for {
-      cust <- customer.create("Bruno", 32)
-      name <- customer.rename("Bruno Mars")
-      name <- customer.rename("Bruno")
+      cust <- bankAccount.open("Bruno", 1000)
+      name <- bankAccount.withdraw(100)
+      name <- bankAccount.withdraw(100)
     } yield ()).failed foreach println
-    customer.state
+    bankAccount.state
   }
 
   val offsetStore = new MongoOffsetStore(offsetsCollection)
-  val journalEventStream = new MongoPollingEventStream[CustomerEvent](journalCollection)
-  val customersProjection = new CustomersProjection(customersCollection, journalEventStream, offsetStore)
+  val journalEventStream = new MongoPollingEventStream[BankAccountEvent](journalCollection)
+  val bankAccounts = new BankAccountsProjection(bankAccountsCollection, journalEventStream, offsetStore)
 
   val start = System.currentTimeMillis
-  customersProjection.run()
-  while (Await.result(offsetStore.load("customers-projection"), 3 second) != 300) {
+  bankAccounts.run()
+  while (Await.result(offsetStore.load("bank-accounts-projection"), 3 second) != 300) {
     Thread.sleep(100)
   }
   println(s"Projection run in ${System.currentTimeMillis - start}ms")
@@ -54,79 +54,79 @@ object Main extends App {
   journalEventStream.shutdown()
 }
 
-sealed trait CustomerState extends AggregateState[CustomerEvent, CustomerState]
-case object Empty extends CustomerState {
+sealed trait BankAccountState extends AggregateState[BankAccountEvent, BankAccountState]
+case object Empty extends BankAccountState {
   val eventHandler = EventHandler {
-    case CustomerCreated(id, name, age) => Customer(id, name, age)
+    case BankAccountOpened(id, name, balance) => BankAccount(id, name, balance)
   }
 }
-case class Customer(id: Int, name: String, age: Int) extends CustomerState {
+case class BankAccount(id: Int, name: String, balance: Int) extends BankAccountState {
   val eventHandler = EventHandler {
-    case CustomerRenamed(id, name) => copy(name = name)
+    case MoneyWithdrawn(id, amount) => copy(balance = balance - amount)
   }
 }
 
-sealed trait CustomerEvent
-case class CustomerCreated(id: Int, name: String, age: Int) extends CustomerEvent
-case class CustomerRenamed(id: Int, name: String) extends CustomerEvent
+sealed trait BankAccountEvent
+case class BankAccountOpened(id: Int, name: String, balance: Int) extends BankAccountEvent
+case class MoneyWithdrawn(id: Int, amount: Int) extends BankAccountEvent
 
-class CustomerEventSerializer extends EventSerializer[CustomerEvent] {
+class BankAccountEventSerializer extends EventSerializer[BankAccountEvent] {
   import JsonEncoding._
-  def serialize(event: CustomerEvent) = event match {
-    case event: CustomerCreated => SerializedEvent("CustomerCreated.V1", encode(event))
-    case event: CustomerRenamed => SerializedEvent("CustomerRenamed.V1", encode(event))
+  def serialize(event: BankAccountEvent) = event match {
+    case event: BankAccountOpened => SerializedEvent("BankAccountOpened.V1", encode(event))
+    case event: MoneyWithdrawn => SerializedEvent("MoneyWithdrawn.V1", encode(event))
   }
   def deserialize(manifest: String, data: String) = manifest match {
-    case "CustomerCreated.V1" => decode[CustomerCreated](data)
-    case "CustomerRenamed.V1" => decode[CustomerRenamed](data)
+    case "BankAccountOpened.V1" => decode[BankAccountOpened](data)
+    case "MoneyWithdrawn.V1" => decode[MoneyWithdrawn](data)
   }
 }
 
-class CustomerAggregate(id: Int, journal: Journal[CustomerEvent], cache: Cache[CustomerState])
-  extends Aggregate[CustomerEvent, CustomerState](journal, cache) {
+class BankAccountAggregate(id: Int, journal: Journal[BankAccountEvent], cache: Cache[BankAccountState])
+  extends Aggregate[BankAccountEvent, BankAccountState](journal, cache) {
 
-  val aggregateId = s"customer-$id"
+  val aggregateId = s"bank-account-$id"
   val initialState = Empty
 
-  private def recoverCustomer(): Future[Customer] =
+  private def recoverBankAccount(): Future[BankAccount] =
     recover map {
-      case customer: Customer => customer
-      case _ => throw new Exception(s"Customer with id '$id' not found")
+      case bankAccount: BankAccount => bankAccount
+      case _                        => throw new Exception(s"Bank account with id '$id' not found")
     }
 
-  def create(name: String, age: Int): Future[Customer] =
+  def open(name: String, balance: Int): Future[BankAccount] =
     for {
       state <- recover
-      customer <- state match {
-        case Empty => persist(state, CustomerCreated(id, name, age)).mapStateTo[Customer]
-        case _     => Future.failed(new Exception(s"Customer with id '$id' already exists"))
+      bankAccount <- state match {
+        case Empty => persist(state, BankAccountOpened(id, name, balance)).mapStateTo[BankAccount]
+        case _     => Future.failed(new Exception(s"Bank account with id '$id' already exists"))
       }
-    } yield customer
+    } yield bankAccount
 
-  def rename(name: String): Future[String] = retry(1) {
+  def withdraw(amount: Int): Future[Int] = retry(1) {
     for {
-      customer <- recoverCustomer
-      renamedCustomer <- persist(customer, CustomerRenamed(id, name)).mapStateTo[Customer]
-    } yield renamedCustomer.name
+      bankAccount <- recoverBankAccount
+      updatedBankAccount <- persist(bankAccount, MoneyWithdrawn(id, amount)).mapStateTo[BankAccount]
+    } yield updatedBankAccount.balance
   }
 }
 
-class CustomersProjection(
+class BankAccountsProjection(
   collection: MongoCollection[Document],
-  eventStream: EventStream[CustomerEvent],
+  eventStream: EventStream[BankAccountEvent],
   offsetStore: OffsetStore
-  ) extends ResumableProjection[CustomerEvent](eventStream, offsetStore) {
-  val projectionId = "customers-projection"
+  ) extends ResumableProjection[BankAccountEvent](eventStream, offsetStore) {
+  val projectionId = "bank-accounts-projection"
 
   collection.createIndex(Indexes.ascending("id"), new IndexOptions().unique(true)).toFuture()
 
-  def processEvent(event: CustomerEvent): Future[Unit] = event match {
-    case CustomerCreated(id, name, age) =>
-      collection.insertOne(Document("id" -> id, "name" -> name, "age" -> age))
+  def processEvent(event: BankAccountEvent): Future[Unit] = event match {
+    case BankAccountOpened(id, name, balance) =>
+      collection.insertOne(Document("id" -> id, "name" -> name, "balance" -> balance))
                 .toFuture()
                 .map(completed => ())
-    case CustomerRenamed(id, name) =>
-      collection.updateOne(Filters.equal("id", id), Document("$set" -> Document("name" -> name)))
+    case MoneyWithdrawn(id, amount) =>
+      collection.updateOne(Filters.equal("id", id), Document("$inc" -> Document("balance" -> -amount)))
                 .toFuture()
                 .map(completed => ())
   }

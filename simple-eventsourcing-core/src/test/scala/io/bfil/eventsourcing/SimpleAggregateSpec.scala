@@ -9,53 +9,53 @@ import org.scalatest.concurrent.ScalaFutures
 
 class SimpleAggregateSpec extends WordSpec with Matchers with ScalaFutures with SingleThreadedExecutionContext {
 
-  val journal: Journal[CustomerEvent] = new InMemoryJournal[CustomerEvent]
+  val journal: Journal[BankAccountEvent] = new InMemoryJournal[BankAccountEvent]
 
-  val customer = new SimpleCustomerAggregate(1, journal)
+  val bankAccount = new SimpleBankAccountAggregate(1, journal)
 
   "SimpleAggregate" should {
 
-    "create a customer correctly" in {
-      customer.create("Bruno", 32).futureValue shouldBe Customer(1, "Bruno", 32)
-      customer.recover.futureValue shouldBe Some(Customer(1, "Bruno", 32))
-      journal.read("customer-1").futureValue.length shouldBe 1
+    "open a bank account" in {
+      bankAccount.open("Bruno", 1000).futureValue shouldBe BankAccount(1, "Bruno", 1000)
+      bankAccount.recover.futureValue shouldBe Some(BankAccount(1, "Bruno", 1000))
+      journal.read("bank-account-1").futureValue.length shouldBe 1
     }
 
-    "rename a customer correctly" in {
-      customer.rename("Bruno Mars").futureValue shouldBe "Bruno Mars"
-      customer.recover.futureValue shouldBe Some(Customer(1, "Bruno Mars", 32))
-      journal.read("customer-1").futureValue.length shouldBe 2
+    "withdraw money from a bank account" in {
+      bankAccount.withdraw(100).futureValue shouldBe 900
+      bankAccount.recover.futureValue shouldBe Some(BankAccount(1, "Bruno", 900))
+      journal.read("bank-account-1").futureValue.length shouldBe 2
     }
 
   }
 
-  sealed trait CustomerEvent
-  case class CustomerCreated(id: Int, name: String, age: Int) extends CustomerEvent
-  case class CustomerRenamed(id: Int, name: String) extends CustomerEvent
+  sealed trait BankAccountEvent
+  case class BankAccountOpened(id: Int, name: String, balance: Int) extends BankAccountEvent
+  case class MoneyWithdrawn(id: Int, amount: Int) extends BankAccountEvent
 
-  case class Customer(id: Int, name: String, age: Int)
+  case class BankAccount(id: Int, name: String, balance: Int)
 
-  class SimpleCustomerAggregate(id: Int, journal: Journal[CustomerEvent])
-    extends SimpleAggregate[CustomerEvent, Option[Customer]](journal) {
+  class SimpleBankAccountAggregate(id: Int, journal: Journal[BankAccountEvent])
+    extends SimpleAggregate[BankAccountEvent, Option[BankAccount]](journal) {
 
-    val aggregateId = s"customer-$id"
+    val aggregateId = s"bank-account-$id"
     val initialState = None
 
-    def onEvent(state: Option[Customer], event: CustomerEvent): Option[Customer] = event match {
-      case CustomerCreated(id, name, age) => Some(Customer(id, name, age))
-      case CustomerRenamed(id, name)      => state.map(_.copy(name = name))
+    def onEvent(state: Option[BankAccount], event: BankAccountEvent): Option[BankAccount] = event match {
+      case BankAccountOpened(id, name, balance) => Some(BankAccount(id, name, balance))
+      case MoneyWithdrawn(id, amount)           => state.map(a => a.copy(balance = a.balance - amount))
     }
 
-    def create(name: String, age: Int): Future[Customer] =
+    def open(name: String, balance: Int): Future[BankAccount] =
       for {
-        state <- recover
-        newState <- persist(state, CustomerCreated(id, name, age))
+        state    <- recover
+        newState <- persist(state, BankAccountOpened(id, name, balance))
       } yield newState.get
 
-    def rename(name: String): Future[String] =
+    def withdraw(amount: Int): Future[Int] =
       for {
-        state <- recover
-        newState <- persist(state, CustomerRenamed(id, name))
-      } yield newState.get.name
+        state    <- recover
+        newState <- persist(state, MoneyWithdrawn(id, amount))
+      } yield newState.get.balance
   }
 }
