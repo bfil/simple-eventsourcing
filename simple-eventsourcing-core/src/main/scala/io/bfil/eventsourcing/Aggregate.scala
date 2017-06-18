@@ -2,7 +2,7 @@ package io.bfil.eventsourcing
 
 import scala.concurrent.{ExecutionContext, Future}
 
-abstract class Aggregate[Event, State](journal: Journal[(Event, Long)])(implicit executionContext: ExecutionContext) {
+abstract class Aggregate[Event, State](journal: JournalWithOptimisticLocking[Event])(implicit executionContext: ExecutionContext) {
 
   val aggregateId: String
   protected val initialState: State
@@ -11,25 +11,23 @@ abstract class Aggregate[Event, State](journal: Journal[(Event, Long)])(implicit
 
   protected def retry[T](n: Int)(f: => Future[T]): Future[T] =
     f recoverWith {
-      case ex: OptimisticLockException if n > 0 => retry(n - 1)(f)
+      case _: OptimisticLockException if n > 0 => retry(n - 1)(f)
     }
 
-  def recover(): Future[(State, Long)] =
+  def recover(): Future[VersionedState[State]] =
     for {
       events <- journal.read(aggregateId)
-      (state, lastSequenceNr) = events.foldLeft((initialState, 0L)) {
-        case ((state, _), (event, sequenceNr)) => (onEvent(state, event), sequenceNr)
+      versionedState = events.foldLeft(VersionedState(initialState)) { case (versionedState, eventWithOffset) =>
+        VersionedState(onEvent(versionedState.state, eventWithOffset.event), eventWithOffset.offset)
       }
-    } yield (state, lastSequenceNr)
+    } yield versionedState
 
-  def persist(currentState: State, lastSequenceNr: Long, events: Event*): Future[State] = {
-    val eventsWithSequenceNumbers = events.zipWithIndex.map { case (event, i) =>
-      (event, lastSequenceNr + i + 1)
-    }
+  def persist(currentVersionedState: VersionedState[State], events: Event*): Future[State] = {
     for {
-      _ <- journal.write(aggregateId, eventsWithSequenceNumbers)
-      newState = events.foldLeft(currentState)(onEvent)
+      _ <- journal.write(aggregateId, currentVersionedState.version, events)
+      newState = events.foldLeft(currentVersionedState.state)(onEvent)
     } yield newState
   }
 
 }
+

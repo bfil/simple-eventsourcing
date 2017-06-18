@@ -7,36 +7,26 @@ import scala.concurrent.Future
 import org.scalatest.{Matchers, WordSpec}
 import org.scalatest.concurrent.ScalaFutures
 
-class AggregateSpec extends WordSpec with Matchers with ScalaFutures with SingleThreadedExecutionContext {
+class SnapshottingAggregateSpec extends WordSpec with Matchers with ScalaFutures with SingleThreadedExecutionContext {
 
   val journal: JournalWithOptimisticLocking[BankAccountEvent] = new InMemoryJournalWithOptimisticLocking[BankAccountEvent]
+  val snapshotStore: SnapshotStore[Option[BankAccount]] = new InMemorySnapshotStore[Option[BankAccount]]
 
-  val bankAccount = new BankAccountAggregate(1, journal)
+  val bankAccount = new BankAccountAggregate(1, journal, snapshotStore)
 
-  "Aggregate" should {
+  "SnapshottingAggregate" should {
 
-    "open a bank account and throw an OptimisticLockException" in {
-      val result1 = bankAccount.open("Bruno", 1000)
-      val result2 = bankAccount.open("Bruno Mars", 1000)
-      result1.futureValue shouldBe BankAccount(1, "Bruno", 1000)
-      result2.failed.futureValue shouldBe an [OptimisticLockException]
-      bankAccount.recover.futureValue shouldBe VersionedState(Some(BankAccount(1, "Bruno", 1000)), 1)
-      journal.read("bank-account-1").futureValue.length shouldBe 1
+    "snapshot after 10 events" in {
+      bankAccount.open("Bruno", 1000).futureValue shouldBe BankAccount(1, "Bruno", 1000)
+      1 to 9 foreach { i =>
+        bankAccount.withdraw(100).futureValue shouldBe (1000 - 100 * i)
+      }
+      journal.read("bank-account-1").futureValue.length shouldBe 10
+      snapshotStore.load("bank-account-1").futureValue shouldBe Some(Snapshot(Some(BankAccount(1, "Bruno", 100)), 10))
     }
 
-    "withdraw money from a bank account and retry on OptimisticLockException" in {
-      val result1 = bankAccount.withdraw(100)
-      val result2 = bankAccount.withdraw(100)
-      result1.futureValue shouldBe 900
-      result2.futureValue shouldBe 800
-      bankAccount.recover.futureValue shouldBe VersionedState(Some(BankAccount(1, "Bruno", 800)), 3)
-      journal.read("bank-account-1").futureValue.length shouldBe 3
-    }
-
-    "fail to withdraw money from a bank account when the balance is too low" in {
-      an[Exception] should be thrownBy bankAccount.withdraw(1000).futureValue
-      bankAccount.recover.futureValue shouldBe VersionedState(Some(BankAccount(1, "Bruno", 800)), 3)
-      journal.read("bank-account-1").futureValue.length shouldBe 3
+    "recover from the last snapshot" in {
+      bankAccount.recover.futureValue shouldBe VersionedState(Some(BankAccount(1, "Bruno", 100)), 10)
     }
 
   }
@@ -47,8 +37,11 @@ class AggregateSpec extends WordSpec with Matchers with ScalaFutures with Single
 
   case class BankAccount(id: Int, name: String, balance: Int)
 
-  class BankAccountAggregate(id: Int, journal: JournalWithOptimisticLocking[BankAccountEvent])
-    extends Aggregate[BankAccountEvent, Option[BankAccount]](journal) {
+  class BankAccountAggregate(
+    id: Int,
+    journal: JournalWithOptimisticLocking[BankAccountEvent],
+    snapshotStore: SnapshotStore[Option[BankAccount]]
+    ) extends SnapshottingAggregate[BankAccountEvent, Option[BankAccount]](journal, snapshotStore, 10) {
 
     val aggregateId = s"bank-account-$id"
     val initialState = None

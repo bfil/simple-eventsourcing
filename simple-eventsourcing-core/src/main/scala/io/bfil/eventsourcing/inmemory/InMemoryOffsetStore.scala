@@ -8,7 +8,7 @@ import io.bfil.eventsourcing.OffsetStore
 class InMemoryOffsetStore extends OffsetStore {
   private val offsets: mutable.Map[String, Long] = mutable.Map.empty
   def load(offsetId: String): Future[Long] = Future.successful {
-    offsets.get(offsetId).getOrElse(0L)
+    offsets.getOrElse(offsetId, 0L)
   }
   def save(offsetId: String, value: Long): Future[Unit] = Future.successful {
     offsets += offsetId -> value

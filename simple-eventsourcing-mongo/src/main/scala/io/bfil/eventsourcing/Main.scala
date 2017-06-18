@@ -138,11 +138,11 @@ class BankAccountsProjection(
     case BankAccountOpened(id, name, balance) =>
       collection.insertOne(Document("id" -> id, "name" -> name, "balance" -> balance))
                 .toFuture()
-                .map(completed => ())
+                .map(_ => ())
     case MoneyWithdrawn(id, amount) =>
       collection.updateOne(Filters.equal("id", id), Document("$inc" -> Document("balance" -> -amount)))
                 .toFuture()
-                .map(completed => ())
+                .map(_ => ())
     case MoneyWithdrawnV1(id, amount, _) => processEvent(MoneyWithdrawn(id, amount))
   }
 }
