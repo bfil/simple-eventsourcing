@@ -1,6 +1,6 @@
 lazy val root = Project("simple-eventsourcing", file("."))
   .settings(settings, publishArtifact := false)
-  .aggregate(core, mongo)
+  .aggregate(core, mongo, postgres)
 
 lazy val core = Project("simple-eventsourcing-core", file("simple-eventsourcing-core"))
   .settings(settings, name := "simple-eventsourcing", libraryDependencies ++= Seq(
@@ -10,6 +10,15 @@ lazy val core = Project("simple-eventsourcing-core", file("simple-eventsourcing-
 lazy val mongo = Project("simple-eventsourcing-mongo", file("simple-eventsourcing-mongo"))
   .settings(settings, libraryDependencies ++= Seq(
     "org.mongodb.scala" %% "mongo-scala-driver" % "2.1.0",
+    "io.circe" %% "circe-core" % "0.8.0",
+    "io.circe" %% "circe-generic" % "0.8.0",
+    "io.circe" %% "circe-parser" % "0.8.0"
+  ))
+  .dependsOn(core)
+
+lazy val postgres = Project("simple-eventsourcing-postgres", file("simple-eventsourcing-postgres"))
+  .settings(settings, libraryDependencies ++= Seq(
+    "org.postgresql" % "postgresql" % "42.1.1",
     "io.circe" %% "circe-core" % "0.8.0",
     "io.circe" %% "circe-generic" % "0.8.0",
     "io.circe" %% "circe-parser" % "0.8.0"

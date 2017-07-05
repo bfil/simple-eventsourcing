@@ -1,6 +1,7 @@
 package io.bfil.eventsourcing
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.reflect.ClassTag
 
 abstract class Aggregate[Event, State](journal: JournalWithOptimisticLocking[Event])(implicit executionContext: ExecutionContext) {
 
@@ -27,6 +28,10 @@ abstract class Aggregate[Event, State](journal: JournalWithOptimisticLocking[Eve
       _ <- journal.write(aggregateId, currentVersionedState.version, events)
       newState = events.foldLeft(currentVersionedState.state)(onEvent)
     } yield newState
+  }
+
+  protected implicit class MappableFutureState(future: Future[State]) {
+    def mapStateTo[T <: State : ClassTag] = future.mapTo[T]
   }
 
 }

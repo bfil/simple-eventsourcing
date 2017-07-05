@@ -33,9 +33,9 @@ object Main extends App {
   1 to 100 foreach { id =>
     val bankAccount = new BankAccountAggregate(id, journal, cache)
     for {
-      cust <- bankAccount.open("Bruno", 1000)
-      name <- bankAccount.withdraw(100)
-      name <- bankAccount.withdraw(100)
+      _ <- bankAccount.open("Bruno", 1000)
+      _ <- bankAccount.withdraw(100)
+      _ <- bankAccount.withdraw(100)
     } yield ()
   }
 
