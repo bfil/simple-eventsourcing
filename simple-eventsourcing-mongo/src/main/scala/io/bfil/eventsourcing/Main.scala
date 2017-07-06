@@ -23,6 +23,12 @@ object Main extends App {
   val offsetsCollection = database.getCollection("offsets")
   val bankAccountsCollection = database.getCollection("bankAccounts")
 
+  Await.result(Future.sequence(Seq(
+    journalCollection.drop().toFuture(),
+    offsetsCollection.drop().toFuture(),
+    bankAccountsCollection.drop().toFuture()
+  )), 3 seconds)
+
   implicit val bankAccountEventSerializer = new BankAccountEventSerializer
   implicit val bankAccountEventUpcaster = new BankAccountEventUpcaster
 
