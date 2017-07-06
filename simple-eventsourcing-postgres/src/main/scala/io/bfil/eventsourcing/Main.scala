@@ -38,7 +38,7 @@ object Main extends App {
   val aggregatesExecutor = Executors.newSingleThreadExecutor()
   implicit val aggregatesExecutionContext = ExecutionContext.fromExecutor(aggregatesExecutor)
 
-  1 to 100 foreach { id =>
+  1 to 1000 foreach { id =>
     val bankAccount = new BankAccountAggregate(id, journal)
     for {
       _ <- bankAccount.open("Bruno", 1000)
@@ -56,7 +56,7 @@ object Main extends App {
 
   val start = System.currentTimeMillis
   bankAccountsProjection.run()
-  while (Await.result(offsetStore.load("bank-accounts-projection"), 3 seconds) != 300) {
+  while (Await.result(offsetStore.load("bank-accounts-projection"), 3 seconds) != 3000) {
     Thread.sleep(100)
   }
   println(s"Projection run in ${System.currentTimeMillis - start}ms")

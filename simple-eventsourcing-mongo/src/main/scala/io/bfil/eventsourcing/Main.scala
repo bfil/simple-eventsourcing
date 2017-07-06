@@ -17,7 +17,7 @@ import org.mongodb.scala.model._
 object Main extends App {
   Logger.getLogger("org.mongodb.driver").setLevel(Level.OFF)
 
-  val mongoClient = MongoClient("mongodb://localhost")
+  val mongoClient = MongoClient("mongodb://localhost/?waitQueueMultiple=10")
   val database = mongoClient.getDatabase("simple-eventsourcing")
   val journalCollection = database.getCollection("journal")
   val offsetsCollection = database.getCollection("offsets")
@@ -36,7 +36,7 @@ object Main extends App {
   val journal = new MongoJournal[BankAccountEvent](journalCollection, journalWriter)
   val cache = new InMemoryCache[BankAccountState]
 
-  1 to 100 foreach { id =>
+  1 to 1000 foreach { id =>
     val bankAccount = new BankAccountAggregate(id, journal, cache)
     for {
       _ <- bankAccount.open("Bruno", 1000)
@@ -51,7 +51,7 @@ object Main extends App {
 
   val start = System.currentTimeMillis
   bankAccounts.run()
-  while (Await.result(offsetStore.load("bank-accounts-projection"), 3 seconds) != 300) {
+  while (Await.result(offsetStore.load("bank-accounts-projection"), 3 seconds) != 3000) {
     Thread.sleep(100)
   }
   println(s"Projection run in ${System.currentTimeMillis - start}ms")
