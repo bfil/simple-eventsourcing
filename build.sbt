@@ -22,7 +22,8 @@ lazy val postgres = Project("simple-eventsourcing-postgres", file("simple-events
     "com.zaxxer" % "HikariCP" % "2.6.2",
     "io.circe" %% "circe-core" % "0.8.0",
     "io.circe" %% "circe-generic" % "0.8.0",
-    "io.circe" %% "circe-parser" % "0.8.0"
+    "io.circe" %% "circe-parser" % "0.8.0",
+    "org.slf4j" % "slf4j-nop" % "1.7.25"
   ))
   .dependsOn(core)
 

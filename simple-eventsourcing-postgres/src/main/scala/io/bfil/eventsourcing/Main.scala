@@ -31,12 +31,12 @@ object Main extends App {
     }
   }
 
-  val aggregatesExecutor = Executors.newSingleThreadExecutor()
-  implicit val aggregatesExecutionContext = ExecutionContext.fromExecutor(aggregatesExecutor)
-
   implicit val bankAccountEventSerializer = new BankAccountEventSerializer
 
   val journal = new PostgresJournal[BankAccountEvent](dataSource)
+
+  val aggregatesExecutor = Executors.newSingleThreadExecutor()
+  implicit val aggregatesExecutionContext = ExecutionContext.fromExecutor(aggregatesExecutor)
 
   1 to 100 foreach { id =>
     val bankAccount = new BankAccountAggregate(id, journal)
@@ -51,7 +51,7 @@ object Main extends App {
   val journalEventStream = new PostgresPollingEventStream[BankAccountEvent](dataSource)
 
   val projectionExecutor = Executors.newSingleThreadExecutor()
-  implicit val projectionExecutionContext = ExecutionContext.fromExecutor(aggregatesExecutor)
+  val projectionExecutionContext = ExecutionContext.fromExecutor(aggregatesExecutor)
   val bankAccountsProjection = new BankAccountsProjection(dataSource, "bank_accounts", journalEventStream, offsetStore)(projectionExecutionContext)
 
   val start = System.currentTimeMillis
