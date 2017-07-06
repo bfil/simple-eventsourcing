@@ -1,11 +1,13 @@
 package io.bfil.eventsourcing.postgres
 
-import java.sql.DriverManager
+import java.sql.SQLException
 import java.util.concurrent.Executors
 import javax.sql.DataSource
 
 import scala.concurrent.{ExecutionContext, Future}
-import io.bfil.eventsourcing.{EventWithOffset, JournalWithOptimisticLocking}
+import scala.util.control.NonFatal
+
+import io.bfil.eventsourcing.{EventWithOffset, JournalWithOptimisticLocking, OptimisticLockException}
 import io.bfil.eventsourcing.serialization.EventSerializer
 
 class PostgresJournal[Event](dataSource: DataSource, tableName: String = "journal")(implicit serializer: EventSerializer[Event])
@@ -61,7 +63,13 @@ class PostgresJournal[Event](dataSource: DataSource, tableName: String = "journa
       writeStatement.setString(4, serializedEvent.data)
       writeStatement.addBatch()
     }
-    writeStatement.executeBatch()
+    try {
+      writeStatement.executeBatch()
+    } catch {
+      case ex: SQLException if ex.getSQLState == "23505" =>
+        throw new OptimisticLockException(s"Unexpected version $lastSeenOffset for aggregate '$aggregateId")
+      case NonFatal(ex) => throw ex
+    }
     writeStatement.close()
     connection.close()
   }
