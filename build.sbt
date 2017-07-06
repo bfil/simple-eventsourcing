@@ -19,6 +19,7 @@ lazy val mongo = Project("simple-eventsourcing-mongo", file("simple-eventsourcin
 lazy val postgres = Project("simple-eventsourcing-postgres", file("simple-eventsourcing-postgres"))
   .settings(settings, libraryDependencies ++= Seq(
     "org.postgresql" % "postgresql" % "42.1.1",
+    "com.zaxxer" % "HikariCP" % "2.6.2",
     "io.circe" %% "circe-core" % "0.8.0",
     "io.circe" %% "circe-generic" % "0.8.0",
     "io.circe" %% "circe-parser" % "0.8.0"

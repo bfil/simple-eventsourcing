@@ -2,18 +2,19 @@ package io.bfil.eventsourcing.postgres
 
 import java.sql.DriverManager
 import java.util.concurrent.Executors
+import javax.sql.DataSource
 
 import scala.concurrent.{ExecutionContext, Future}
 import io.bfil.eventsourcing.{EventWithOffset, JournalWithOptimisticLocking}
 import io.bfil.eventsourcing.serialization.EventSerializer
 
-class PostgresJournal[Event](connectionString: String, tableName: String = "journal")(implicit serializer: EventSerializer[Event])
+class PostgresJournal[Event](dataSource: DataSource, tableName: String = "journal")(implicit serializer: EventSerializer[Event])
   extends JournalWithOptimisticLocking[Event] {
 
-  private val connection = DriverManager.getConnection(connectionString)
   private val executor = Executors.newSingleThreadExecutor()
   private implicit val executionContext = ExecutionContext.fromExecutor(executor)
 
+  private val connection = dataSource.getConnection()
   private val statement = connection.createStatement
   statement.execute(s"""
     CREATE TABLE IF NOT EXISTS $tableName (
@@ -27,8 +28,10 @@ class PostgresJournal[Event](connectionString: String, tableName: String = "jour
     )
   """)
   statement.close()
+  connection.close()
 
   def read(aggregateId: String, offset: Long = 0): Future[Seq[EventWithOffset[Event]]] = Future {
+    val connection = dataSource.getConnection()
     val readStatement = connection.prepareStatement(s"SELECT * FROM $tableName WHERE aggregate_id = ? AND aggregate_offset > ?")
     readStatement.setString(1, aggregateId)
     readStatement.setLong(2, offset)
@@ -43,10 +46,12 @@ class PostgresJournal[Event](connectionString: String, tableName: String = "jour
     }
     resultSet.close()
     readStatement.close()
+    connection.close()
     events
   }
 
   def write(aggregateId: String, lastSeenOffset: Long, events: Seq[Event]): Future[Unit] = Future {
+    val connection = dataSource.getConnection()
     val writeStatement = connection.prepareStatement(s"INSERT INTO $tableName(aggregate_id, aggregate_offset, manifest, data) VALUES (?, ?, ?, ?)")
     for ((event, index) <- events.zipWithIndex) {
       val serializedEvent = serializer.serialize(event)
@@ -58,10 +63,10 @@ class PostgresJournal[Event](connectionString: String, tableName: String = "jour
     }
     writeStatement.executeBatch()
     writeStatement.close()
+    connection.close()
   }
 
   def shutdown() = {
-    connection.close()
     executor.shutdown()
   }
 

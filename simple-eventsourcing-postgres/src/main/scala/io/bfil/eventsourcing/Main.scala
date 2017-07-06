@@ -1,21 +1,26 @@
 package io.bfil.eventsourcing
 
-import java.sql._
 import java.util.concurrent.Executors
+import javax.sql.DataSource
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
+
+import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
 import io.circe.generic.auto._
 import io.bfil.eventsourcing.circe.JsonEncoding
 import io.bfil.eventsourcing.postgres.{PostgresJournal, PostgresOffsetStore, PostgresPollingEventStream}
 import io.bfil.eventsourcing.serialization._
 
 object Main extends App {
-  Class.forName("org.postgresql.Driver")
 
-  val connectionString = "jdbc:postgresql://localhost/simple_eventsourcing?autoReconnect=true"
+  val dataSource: HikariDataSource = {
+    val config = new HikariConfig()
+    config.setJdbcUrl("jdbc:postgresql://localhost/simple_eventsourcing")
+    new HikariDataSource(config)
+  }
 
-  val connection = DriverManager.getConnection(connectionString)
+  val connection = dataSource.getConnection()
   val statement = connection.createStatement
   statement.execute("""
     DROP TABLE IF EXISTS journal;
@@ -30,7 +35,7 @@ object Main extends App {
 
   implicit val bankAccountEventSerializer = new BankAccountEventSerializer
 
-  val journal = new PostgresJournal[BankAccountEvent](connectionString)
+  val journal = new PostgresJournal[BankAccountEvent](dataSource)
 
   1 to 100 foreach { id =>
     val bankAccount = new BankAccountAggregate(id, journal)
@@ -41,12 +46,12 @@ object Main extends App {
     } yield ()
   }
 
-  val offsetStore = new PostgresOffsetStore(connectionString)
-  val journalEventStream = new PostgresPollingEventStream[BankAccountEvent](connectionString)
+  val offsetStore = new PostgresOffsetStore(dataSource)
+  val journalEventStream = new PostgresPollingEventStream[BankAccountEvent](dataSource)
 
   val projectionExecutor = Executors.newSingleThreadExecutor()
   implicit val projectionExecutionContext = ExecutionContext.fromExecutor(aggregatesExecutor)
-  val bankAccountsProjection = new BankAccountsProjection(connectionString, "bank_accounts", journalEventStream, offsetStore)(projectionExecutionContext)
+  val bankAccountsProjection = new BankAccountsProjection(dataSource, "bank_accounts", journalEventStream, offsetStore)(projectionExecutionContext)
 
   val start = System.currentTimeMillis
   bankAccountsProjection.run()
@@ -58,7 +63,6 @@ object Main extends App {
   journal.shutdown()
   offsetStore.shudown()
   journalEventStream.shutdown()
-  bankAccountsProjection.shutdown()
 
   aggregatesExecutor.shutdown()
   projectionExecutor.shutdown()
@@ -127,14 +131,15 @@ class BankAccountAggregate(id: Int, journal: JournalWithOptimisticLocking[BankAc
 }
 
 class BankAccountsProjection(
-  connectionString: String,
+  dataSource: DataSource,
   tableName: String,
   eventStream: EventStream[BankAccountEvent],
   offsetStore: OffsetStore
   )(implicit executionContext: ExecutionContext) extends ResumableProjection[BankAccountEvent](eventStream, offsetStore) {
+
   val projectionId = "bank-accounts-projection"
 
-  private val connection = DriverManager.getConnection(connectionString)
+  private val connection = dataSource.getConnection()
   private val statement = connection.createStatement
   statement.execute(s"""
     CREATE TABLE IF NOT EXISTS $tableName (
@@ -144,28 +149,30 @@ class BankAccountsProjection(
     )
   """)
   statement.close()
+  connection.close()
 
   def processEvent(event: BankAccountEvent): Future[Unit] = event match {
     case BankAccountOpened(id, name, balance) =>
       Future {
+        val connection = dataSource.getConnection()
         val preparedStatement = connection.prepareStatement(s"INSERT INTO $tableName(id, name, balance) VALUES (?, ?, ?)")
         preparedStatement.setLong(1, id)
         preparedStatement.setString(2, name)
         preparedStatement.setInt(3, balance)
         preparedStatement.execute()
         preparedStatement.close()
+        connection.close()
       }
     case MoneyWithdrawn(id, amount) =>
       Future {
+        val connection = dataSource.getConnection()
         val preparedStatement = connection.prepareStatement(s"UPDATE $tableName SET balance = balance - ? WHERE id = ?")
         preparedStatement.setInt(1, amount)
         preparedStatement.setLong(2, id)
         preparedStatement.execute()
         preparedStatement.close()
+        connection.close()
       }
   }
 
-  def shutdown() = {
-    connection.close()
-  }
 }
