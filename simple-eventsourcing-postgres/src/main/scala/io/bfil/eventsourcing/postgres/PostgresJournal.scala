@@ -24,7 +24,7 @@ class PostgresJournal[Event](dataSource: DataSource, tableName: String = "journa
        aggregate_id      varchar(100),
        aggregate_offset  bigint,
        manifest          varchar(100),
-       data              text,
+       data              jsonb,
        timestamp         timestamp without time zone DEFAULT(NOW()),
        CONSTRAINT aggregate_versioning UNIQUE(aggregate_id, aggregate_offset)
     )
@@ -54,7 +54,7 @@ class PostgresJournal[Event](dataSource: DataSource, tableName: String = "journa
 
   def write(aggregateId: String, lastSeenOffset: Long, events: Seq[Event]): Future[Unit] = Future {
     val connection = dataSource.getConnection()
-    val writeStatement = connection.prepareStatement(s"INSERT INTO $tableName(aggregate_id, aggregate_offset, manifest, data) VALUES (?, ?, ?, ?)")
+    val writeStatement = connection.prepareStatement(s"INSERT INTO $tableName(aggregate_id, aggregate_offset, manifest, data) VALUES (?, ?, ?, TO_JSON(?::json))")
     for ((event, index) <- events.zipWithIndex) {
       val serializedEvent = serializer.serialize(event)
       writeStatement.setString(1, aggregateId)
