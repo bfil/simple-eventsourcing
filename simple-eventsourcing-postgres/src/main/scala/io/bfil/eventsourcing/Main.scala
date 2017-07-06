@@ -11,6 +11,7 @@ import io.circe.generic.auto._
 import io.bfil.eventsourcing.circe.JsonEncoding
 import io.bfil.eventsourcing.postgres.{PostgresJournal, PostgresOffsetStore, PostgresPollingEventStream}
 import io.bfil.eventsourcing.serialization._
+import io.bfil.eventsourcing.util.TryWith
 
 object Main extends App {
 
@@ -20,15 +21,15 @@ object Main extends App {
     new HikariDataSource(config)
   }
 
-  val connection = dataSource.getConnection()
-  val statement = connection.createStatement
-  statement.execute("""
-    DROP TABLE IF EXISTS journal;
-    DROP TABLE IF EXISTS offsets;
-    DROP TABLE IF EXISTS bank_accounts;
-  """)
-  statement.close()
-  connection.close()
+  TryWith(dataSource.getConnection()) { connection =>
+    TryWith(connection.createStatement()) { statement =>
+      statement.execute("""
+        DROP TABLE IF EXISTS journal;
+        DROP TABLE IF EXISTS offsets;
+        DROP TABLE IF EXISTS bank_accounts;
+      """)
+    }
+  }
 
   val aggregatesExecutor = Executors.newSingleThreadExecutor()
   implicit val aggregatesExecutionContext = ExecutionContext.fromExecutor(aggregatesExecutor)
@@ -139,39 +140,39 @@ class BankAccountsProjection(
 
   val projectionId = "bank-accounts-projection"
 
-  private val connection = dataSource.getConnection()
-  private val statement = connection.createStatement
-  statement.execute(s"""
-    CREATE TABLE IF NOT EXISTS $tableName (
-      id            bigint PRIMARY KEY,
-      name          varchar(100),
-      balance       integer
-    )
-  """)
-  statement.close()
-  connection.close()
+  TryWith(dataSource.getConnection()) { connection =>
+    TryWith(connection.createStatement()) { statement =>
+      statement.execute(s"""
+        CREATE TABLE IF NOT EXISTS $tableName (
+          id            bigint PRIMARY KEY,
+          name          varchar(100),
+          balance       integer
+        )
+      """)
+    }
+  }
 
   def processEvent(event: BankAccountEvent): Future[Unit] = event match {
     case BankAccountOpened(id, name, balance) =>
       Future {
-        val connection = dataSource.getConnection()
-        val preparedStatement = connection.prepareStatement(s"INSERT INTO $tableName(id, name, balance) VALUES (?, ?, ?)")
-        preparedStatement.setLong(1, id)
-        preparedStatement.setString(2, name)
-        preparedStatement.setInt(3, balance)
-        preparedStatement.execute()
-        preparedStatement.close()
-        connection.close()
+        TryWith(dataSource.getConnection()) { connection =>
+          TryWith(connection.prepareStatement(s"INSERT INTO $tableName(id, name, balance) VALUES (?, ?, ?)")) { statement =>
+            statement.setLong(1, id)
+            statement.setString(2, name)
+            statement.setInt(3, balance)
+            statement.execute()
+          }
+        }
       }
     case MoneyWithdrawn(id, amount) =>
       Future {
-        val connection = dataSource.getConnection()
-        val preparedStatement = connection.prepareStatement(s"UPDATE $tableName SET balance = balance - ? WHERE id = ?")
-        preparedStatement.setInt(1, amount)
-        preparedStatement.setLong(2, id)
-        preparedStatement.execute()
-        preparedStatement.close()
-        connection.close()
+        TryWith(dataSource.getConnection()) { connection =>
+          TryWith(connection.prepareStatement(s"UPDATE $tableName SET balance = balance - ? WHERE id = ?")) { statement =>
+            statement.setInt(1, amount)
+            statement.setLong(2, id)
+            statement.execute()
+          }
+        }
       }
   }
 
