@@ -1,9 +1,9 @@
 package io.bfil.eventsourcing
 
 import java.sql._
+import java.util.concurrent.Executors
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import io.circe.generic.auto._
 import io.bfil.eventsourcing.circe.JsonEncoding
@@ -13,10 +13,9 @@ import io.bfil.eventsourcing.serialization._
 object Main extends App {
   Class.forName("org.postgresql.Driver")
 
-  val connection: Connection = DriverManager.getConnection("jdbc:postgresql://localhost/simple_eventsourcing")
+  val connectionString = "jdbc:postgresql://localhost/simple_eventsourcing?autoReconnect=true"
 
-  implicit val bankAccountEventSerializer = new BankAccountEventSerializer
-
+  val connection = DriverManager.getConnection(connectionString)
   val statement = connection.createStatement
   statement.execute("""
     DROP TABLE IF EXISTS journal;
@@ -24,8 +23,14 @@ object Main extends App {
     DROP TABLE IF EXISTS bank_accounts;
   """)
   statement.close()
+  connection.close()
 
-  val journal = new PostgresJournal[BankAccountEvent](connection)
+  val aggregatesExecutor = Executors.newSingleThreadExecutor()
+  implicit val aggregatesExecutionContext = ExecutionContext.fromExecutor(aggregatesExecutor)
+
+  implicit val bankAccountEventSerializer = new BankAccountEventSerializer
+
+  val journal = new PostgresJournal[BankAccountEvent](connectionString)
 
   1 to 100 foreach { id =>
     val bankAccount = new BankAccountAggregate(id, journal)
@@ -36,19 +41,27 @@ object Main extends App {
     } yield ()
   }
 
-  val offsetStore = new PostgresOffsetStore(connection)
-  val journalEventStream = new PostgresPollingEventStream[BankAccountEvent](connection)
+  val offsetStore = new PostgresOffsetStore(connectionString)
+  val journalEventStream = new PostgresPollingEventStream[BankAccountEvent](connectionString)
 
-  val bankAccounts = new BankAccountsProjection(connection, journalEventStream, offsetStore)
+  val projectionExecutor = Executors.newSingleThreadExecutor()
+  implicit val projectionExecutionContext = ExecutionContext.fromExecutor(aggregatesExecutor)
+  val bankAccountsProjection = new BankAccountsProjection(connectionString, "bank_accounts", journalEventStream, offsetStore)(projectionExecutionContext)
 
   val start = System.currentTimeMillis
-  bankAccounts.run()
-  while (Await.result(offsetStore.load("bank-accounts-projection"), 3 second) != 300) {
+  bankAccountsProjection.run()
+  while (Await.result(offsetStore.load("bank-accounts-projection"), 3 seconds) != 300) {
     Thread.sleep(100)
   }
   println(s"Projection run in ${System.currentTimeMillis - start}ms")
 
+  journal.shutdown()
+  offsetStore.shudown()
   journalEventStream.shutdown()
+  bankAccountsProjection.shutdown()
+
+  aggregatesExecutor.shutdown()
+  projectionExecutor.shutdown()
 }
 
 sealed trait BankAccountState extends AggregateState[BankAccountEvent, BankAccountState]
@@ -79,7 +92,7 @@ class BankAccountEventSerializer extends EventSerializer[BankAccountEvent] {
   }
 }
 
-class BankAccountAggregate(id: Int, journal: JournalWithOptimisticLocking[BankAccountEvent])
+class BankAccountAggregate(id: Int, journal: JournalWithOptimisticLocking[BankAccountEvent])(implicit executionContext: ExecutionContext)
   extends Aggregate[BankAccountEvent, BankAccountState](journal) {
 
   val aggregateId = s"bank-account-$id"
@@ -114,15 +127,17 @@ class BankAccountAggregate(id: Int, journal: JournalWithOptimisticLocking[BankAc
 }
 
 class BankAccountsProjection(
-  connection: Connection,
+  connectionString: String,
+  tableName: String,
   eventStream: EventStream[BankAccountEvent],
   offsetStore: OffsetStore
-  ) extends ResumableProjection[BankAccountEvent](eventStream, offsetStore) {
+  )(implicit executionContext: ExecutionContext) extends ResumableProjection[BankAccountEvent](eventStream, offsetStore) {
   val projectionId = "bank-accounts-projection"
 
-  val statement = connection.createStatement
-  statement.execute("""
-    CREATE TABLE IF NOT EXISTS bank_accounts (
+  private val connection = DriverManager.getConnection(connectionString)
+  private val statement = connection.createStatement
+  statement.execute(s"""
+    CREATE TABLE IF NOT EXISTS $tableName (
       id            bigint PRIMARY KEY,
       name          varchar(100),
       balance       integer
@@ -133,8 +148,7 @@ class BankAccountsProjection(
   def processEvent(event: BankAccountEvent): Future[Unit] = event match {
     case BankAccountOpened(id, name, balance) =>
       Future {
-        val query = "INSERT INTO bank_accounts(id, name, balance) VALUES (?, ?, ?)"
-        val preparedStatement = connection.prepareStatement(query)
+        val preparedStatement = connection.prepareStatement(s"INSERT INTO $tableName(id, name, balance) VALUES (?, ?, ?)")
         preparedStatement.setLong(1, id)
         preparedStatement.setString(2, name)
         preparedStatement.setInt(3, balance)
@@ -143,12 +157,15 @@ class BankAccountsProjection(
       }
     case MoneyWithdrawn(id, amount) =>
       Future {
-        val query = "UPDATE bank_accounts SET balance = balance - ? WHERE id = ?"
-        val preparedStatement = connection.prepareStatement(query)
+        val preparedStatement = connection.prepareStatement(s"UPDATE $tableName SET balance = balance - ? WHERE id = ?")
         preparedStatement.setInt(1, amount)
         preparedStatement.setLong(2, id)
         preparedStatement.execute()
         preparedStatement.close()
       }
+  }
+
+  def shutdown() = {
+    connection.close()
   }
 }

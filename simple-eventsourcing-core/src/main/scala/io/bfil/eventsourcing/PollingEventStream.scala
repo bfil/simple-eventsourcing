@@ -9,11 +9,10 @@ import scala.util.{Failure, Success}
 
 import concurrent.FutureOps
 
-abstract class PollingEventStream[Event](pollingDelay: FiniteDuration = 1 second)(
-  implicit scheduler: ScheduledExecutorService = Executors.newScheduledThreadPool(1)
-  ) extends EventStream[Event] {
+abstract class PollingEventStream[Event](pollingDelay: FiniteDuration = 1 second) extends EventStream[Event] {
 
   private val streamOffset = new AtomicLong(0)
+  private val scheduler = Executors.newScheduledThreadPool(1)
   private implicit val executionContext = ExecutionContext.fromExecutor(scheduler)
 
   def poll(offset: Long): Future[Seq[EventEnvelope[Event]]]

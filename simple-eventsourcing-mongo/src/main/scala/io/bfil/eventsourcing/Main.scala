@@ -45,7 +45,7 @@ object Main extends App {
 
   val start = System.currentTimeMillis
   bankAccounts.run()
-  while (Await.result(offsetStore.load("bank-accounts-projection"), 3 second) != 300) {
+  while (Await.result(offsetStore.load("bank-accounts-projection"), 3 seconds) != 300) {
     Thread.sleep(100)
   }
   println(s"Projection run in ${System.currentTimeMillis - start}ms")
