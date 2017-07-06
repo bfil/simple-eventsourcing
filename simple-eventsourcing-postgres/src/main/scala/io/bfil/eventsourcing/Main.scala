@@ -11,7 +11,7 @@ import io.circe.generic.auto._
 import io.bfil.eventsourcing.circe.JsonEncoding
 import io.bfil.eventsourcing.postgres.{PostgresJournal, PostgresOffsetStore, PostgresPollingEventStream}
 import io.bfil.eventsourcing.serialization._
-import io.bfil.eventsourcing.util.TryWith
+import io.bfil.eventsourcing.util.ResourceManagement._
 
 object Main extends App {
 
@@ -21,8 +21,8 @@ object Main extends App {
     new HikariDataSource(config)
   }
 
-  TryWith(dataSource.getConnection()) { connection =>
-    TryWith(connection.createStatement()) { statement =>
+  withResource(dataSource.getConnection()) { connection =>
+    withResource(connection.createStatement()) { statement =>
       statement.execute("""
         DROP TABLE IF EXISTS journal;
         DROP TABLE IF EXISTS offsets;
@@ -140,8 +140,8 @@ class BankAccountsProjection(
 
   val projectionId = "bank-accounts-projection"
 
-  TryWith(dataSource.getConnection()) { connection =>
-    TryWith(connection.createStatement()) { statement =>
+  withResource(dataSource.getConnection()) { connection =>
+    withResource(connection.createStatement()) { statement =>
       statement.execute(s"""
         CREATE TABLE IF NOT EXISTS $tableName (
           id            bigint PRIMARY KEY,
@@ -155,8 +155,8 @@ class BankAccountsProjection(
   def processEvent(event: BankAccountEvent): Future[Unit] = event match {
     case BankAccountOpened(id, name, balance) =>
       Future {
-        TryWith(dataSource.getConnection()) { connection =>
-          TryWith(connection.prepareStatement(s"INSERT INTO $tableName(id, name, balance) VALUES (?, ?, ?)")) { statement =>
+        withResource(dataSource.getConnection()) { connection =>
+          withResource(connection.prepareStatement(s"INSERT INTO $tableName(id, name, balance) VALUES (?, ?, ?)")) { statement =>
             statement.setLong(1, id)
             statement.setString(2, name)
             statement.setInt(3, balance)
@@ -166,8 +166,8 @@ class BankAccountsProjection(
       }
     case MoneyWithdrawn(id, amount) =>
       Future {
-        TryWith(dataSource.getConnection()) { connection =>
-          TryWith(connection.prepareStatement(s"UPDATE $tableName SET balance = balance - ? WHERE id = ?")) { statement =>
+        withResource(dataSource.getConnection()) { connection =>
+          withResource(connection.prepareStatement(s"UPDATE $tableName SET balance = balance - ? WHERE id = ?")) { statement =>
             statement.setInt(1, amount)
             statement.setLong(2, id)
             statement.execute()

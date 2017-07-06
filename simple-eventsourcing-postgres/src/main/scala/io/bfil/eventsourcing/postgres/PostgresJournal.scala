@@ -9,7 +9,7 @@ import scala.util.control.NonFatal
 
 import io.bfil.eventsourcing.{EventWithOffset, JournalWithOptimisticLocking, OptimisticLockException}
 import io.bfil.eventsourcing.serialization.EventSerializer
-import io.bfil.eventsourcing.util.TryWith
+import io.bfil.eventsourcing.util.ResourceManagement._
 
 class PostgresJournal[Event](dataSource: DataSource, tableName: String = "journal")(implicit serializer: EventSerializer[Event])
   extends JournalWithOptimisticLocking[Event] {
@@ -17,8 +17,8 @@ class PostgresJournal[Event](dataSource: DataSource, tableName: String = "journa
   private val executor = Executors.newSingleThreadExecutor()
   private implicit val executionContext = ExecutionContext.fromExecutor(executor)
 
-  TryWith(dataSource.getConnection()) { connection =>
-    TryWith(connection.createStatement()) { statement =>
+  withResource(dataSource.getConnection()) { connection =>
+    withResource(connection.createStatement()) { statement =>
       statement.execute(s"""
         CREATE TABLE IF NOT EXISTS $tableName (
            "offset"          serial PRIMARY KEY,
@@ -34,11 +34,11 @@ class PostgresJournal[Event](dataSource: DataSource, tableName: String = "journa
   }
 
   def read(aggregateId: String, offset: Long = 0): Future[Seq[EventWithOffset[Event]]] = Future {
-    TryWith(dataSource.getConnection()) { connection =>
-      TryWith(connection.prepareStatement(s"SELECT * FROM $tableName WHERE aggregate_id = ? AND aggregate_offset > ?")) { statement =>
+    withResource(dataSource.getConnection()) { connection =>
+      withResource(connection.prepareStatement(s"SELECT * FROM $tableName WHERE aggregate_id = ? AND aggregate_offset > ?")) { statement =>
         statement.setString(1, aggregateId)
         statement.setLong(2, offset)
-        TryWith(statement.executeQuery()) { resultSet =>
+        withResource(statement.executeQuery()) { resultSet =>
           var events = Seq.empty[EventWithOffset[Event]]
           while(resultSet.next()) {
             val aggregateOffset = resultSet.getLong("aggregate_offset")
@@ -54,8 +54,8 @@ class PostgresJournal[Event](dataSource: DataSource, tableName: String = "journa
   }
 
   def write(aggregateId: String, lastSeenOffset: Long, events: Seq[Event]): Future[Unit] = Future {
-    TryWith(dataSource.getConnection()) { connection =>
-      TryWith(connection.prepareStatement(s"INSERT INTO $tableName(aggregate_id, aggregate_offset, manifest, data) VALUES (?, ?, ?, TO_JSON(?::json))")) { statement =>
+    withResource(dataSource.getConnection()) { connection =>
+      withResource(connection.prepareStatement(s"INSERT INTO $tableName(aggregate_id, aggregate_offset, manifest, data) VALUES (?, ?, ?, TO_JSON(?::json))")) { statement =>
         for ((event, index) <- events.zipWithIndex) {
           val serializedEvent = serializer.serialize(event)
           statement.setString(1, aggregateId)

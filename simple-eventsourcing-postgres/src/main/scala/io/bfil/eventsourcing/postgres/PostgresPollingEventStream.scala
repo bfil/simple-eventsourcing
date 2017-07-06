@@ -9,7 +9,7 @@ import scala.concurrent.duration.DurationInt
 
 import io.bfil.eventsourcing.{EventEnvelope, PollingEventStream}
 import io.bfil.eventsourcing.serialization.EventSerializer
-import io.bfil.eventsourcing.util.TryWith
+import io.bfil.eventsourcing.util.ResourceManagement._
 
 class PostgresPollingEventStream[Event](dataSource: DataSource, pollSize: Int = 1000)(implicit serializer: EventSerializer[Event])
   extends PollingEventStream[Event](500 millis) {
@@ -18,10 +18,10 @@ class PostgresPollingEventStream[Event](dataSource: DataSource, pollSize: Int = 
   private implicit val executionContext = ExecutionContext.fromExecutor(executor)
 
   def poll(offset: Long): Future[Seq[EventEnvelope[Event]]] = Future {
-    TryWith(dataSource.getConnection()) { connection =>
-      TryWith(connection.prepareStatement(s"""SELECT * FROM journal WHERE "offset" > ? LIMIT $pollSize""")) { statement =>
+    withResource(dataSource.getConnection()) { connection =>
+      withResource(connection.prepareStatement(s"""SELECT * FROM journal WHERE "offset" > ? LIMIT $pollSize""")) { statement =>
         statement.setLong(1, offset)
-        TryWith(statement.executeQuery()) { resultSet =>
+        withResource(statement.executeQuery()) { resultSet =>
           var events = Seq.empty[EventEnvelope[Event]]
           while (resultSet.next()) {
             val offset = resultSet.getLong("offset")
