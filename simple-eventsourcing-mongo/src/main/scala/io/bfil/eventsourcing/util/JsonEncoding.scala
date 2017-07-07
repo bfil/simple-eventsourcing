@@ -1,4 +1,4 @@
-package io.bfil.eventsourcing.circe
+package io.bfil.eventsourcing.util
 
 import io.circe._
 import io.circe.syntax._

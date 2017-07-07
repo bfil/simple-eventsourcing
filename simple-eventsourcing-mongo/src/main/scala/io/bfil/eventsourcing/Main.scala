@@ -7,7 +7,7 @@ import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 
 import io.circe.generic.auto._
-import io.bfil.eventsourcing.circe.JsonEncoding
+import io.bfil.eventsourcing.util.JsonEncoding
 import io.bfil.eventsourcing.mongodb._
 import io.bfil.eventsourcing.inmemory.InMemoryCache
 import io.bfil.eventsourcing.serialization._

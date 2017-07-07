@@ -8,9 +8,9 @@ import scala.concurrent.duration._
 
 import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
 import io.circe.generic.auto._
-import io.bfil.eventsourcing.circe.JsonEncoding
 import io.bfil.eventsourcing.postgres.{PostgresJournal, PostgresOffsetStore, PostgresPollingEventStream}
 import io.bfil.eventsourcing.serialization._
+import io.bfil.eventsourcing.util.JsonEncoding
 import io.bfil.eventsourcing.util.ResourceManagement._
 
 object Main extends App {
