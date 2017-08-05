@@ -35,4 +35,3 @@ abstract class Aggregate[Event, State](journal: JournalWithOptimisticLocking[Eve
   }
 
 }
-

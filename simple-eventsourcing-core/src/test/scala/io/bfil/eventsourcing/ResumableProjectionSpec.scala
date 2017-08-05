@@ -19,7 +19,7 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
       val eventStream = new InMemoryEventStream[BankAccountEvent]()
       val projection = new BankAccountCountResumableProjection(eventStream, offsetStore)
       projection.run()
-      1 to 10 map { id =>
+      1 to 10 foreach { id =>
         eventStream.publish(EventEnvelope(id, "bank-account-1", BankAccountOpened(id, "Bruno", 1000)))
       }
       eventually {
@@ -33,7 +33,7 @@ class ResumableProjectionSpec extends WordSpec with Matchers with ScalaFutures w
       val projection = new BankAccountCountResumableProjection(eventStream, offsetStore)
       projection.run()
       bankAccountCount shouldBe 10
-      1 to 20 map { id =>
+      1 to 20 foreach { id =>
         eventStream.publish(EventEnvelope(id, "bank-account-1", BankAccountOpened(id, "Bruno", 1000)))
       }
       eventually {

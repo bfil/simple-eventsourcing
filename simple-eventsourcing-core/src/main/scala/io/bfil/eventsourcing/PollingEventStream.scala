@@ -34,7 +34,7 @@ abstract class PollingEventStream[Event](pollingDelay: FiniteDuration = 1 second
         .flatMap { eventEnvelopes =>
           FutureOps.traverseSequentially(eventEnvelopes) { eventEnvelope =>
             f(eventEnvelope) map { _ =>
-              streamOffset.set(eventEnvelope.offset)
+              if(eventEnvelope.offset > streamOffset.get) streamOffset.set(eventEnvelope.offset)
             }
           }
         } onComplete { result =>

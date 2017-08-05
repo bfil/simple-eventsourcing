@@ -17,7 +17,7 @@ class ProjectionSpec extends WordSpec with Matchers with ScalaFutures with Event
 
     "count the number of opened bank accounts" in {
       projection.run()
-      1 to 10 map { id =>
+      1 to 10 foreach { id =>
         eventStream.publish(EventEnvelope(id, "bank-account-1", BankAccountOpened(id, "Bruno", 1000)))
       }
       eventually {

@@ -12,12 +12,12 @@ abstract class SimpleAggregate[Event, State](journal: Journal[Event])(implicit e
   def recover(): Future[State] =
     for {
       events <- journal.read(aggregateId)
-      state = events.foldLeft(initialState)(onEvent)
+      state   = events.foldLeft(initialState)(onEvent)
     } yield state
 
   def persist(currentState: State, events: Event*): Future[State] =
     for {
-      _ <- journal.write(aggregateId, events)
+      _       <- journal.write(aggregateId, events)
       newState = events.foldLeft(currentState)(onEvent)
     } yield newState
 
