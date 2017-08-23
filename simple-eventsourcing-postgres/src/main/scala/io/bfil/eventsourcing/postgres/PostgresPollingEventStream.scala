@@ -1,10 +1,9 @@
 package io.bfil.eventsourcing.postgres
 
 import java.time.Instant
-import java.util.concurrent.Executors
 import javax.sql.DataSource
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 
 import io.bfil.eventsourcing.{EventEnvelope, PollingEventStream}
@@ -14,12 +13,9 @@ import io.bfil.eventsourcing.util.ResourceManagement._
 class PostgresPollingEventStream[Event](dataSource: DataSource, pollSize: Int = 1000)(implicit serializer: EventSerializer[Event])
   extends PollingEventStream[Event](500 millis) {
 
-  private val executor = Executors.newSingleThreadExecutor()
-  private implicit val executionContext = ExecutionContext.fromExecutor(executor)
-
   def poll(offset: Long): Future[Seq[EventEnvelope[Event]]] = Future {
     withResource(dataSource.getConnection()) { connection =>
-      withResource(connection.prepareStatement(s"""SELECT * FROM journal WHERE "offset" > ? LIMIT $pollSize""")) { statement =>
+      withResource(connection.prepareStatement(s"""SELECT * FROM journal WHERE "offset" > ? ORDER BY "offset" LIMIT $pollSize""")) { statement =>
         statement.setLong(1, offset)
         withResource(statement.executeQuery()) { resultSet =>
           var events = Seq.empty[EventEnvelope[Event]]
@@ -36,11 +32,6 @@ class PostgresPollingEventStream[Event](dataSource: DataSource, pollSize: Int = 
         }
       }
     }
-  }
-
-  override def shutdown() = {
-    executor.shutdown()
-    super.shutdown()
   }
 
 }

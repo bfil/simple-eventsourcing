@@ -13,7 +13,7 @@ abstract class PollingEventStream[Event](pollingDelay: FiniteDuration = 1 second
 
   private val streamOffset = new AtomicLong(0)
   private val scheduler = Executors.newScheduledThreadPool(1)
-  private implicit val executionContext = ExecutionContext.fromExecutor(scheduler)
+  protected implicit val executionContext = ExecutionContext.fromExecutor(scheduler)
 
   def poll(offset: Long): Future[Seq[EventEnvelope[Event]]]
 
@@ -34,7 +34,7 @@ abstract class PollingEventStream[Event](pollingDelay: FiniteDuration = 1 second
         .flatMap { eventEnvelopes =>
           FutureOps.traverseSequentially(eventEnvelopes) { eventEnvelope =>
             f(eventEnvelope) map { _ =>
-              if(eventEnvelope.offset > streamOffset.get) streamOffset.set(eventEnvelope.offset)
+              streamOffset.set(eventEnvelope.offset)
             }
           }
         } onComplete { result =>
